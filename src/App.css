@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Animated gradient background helper */
+@keyframes gradient-move {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient {
+  background: linear-gradient(120deg, rgba(99,102,241,0.25), rgba(56,189,248,0.25), rgba(236,72,153,0.25));
+  background-size: 200% 200%;
+  animation: gradient-move 12s ease infinite;
+}
+
+/* Floating blob accents */
+@keyframes floaty {
+  0% { transform: translateY(0) translateX(0) scale(1); }
+  50% { transform: translateY(-12px) translateX(6px) scale(1.05); }
+  100% { transform: translateY(0) translateX(0) scale(1); }
+}
+.blob {
+  filter: blur(40px);
+  opacity: 0.5;
+  animation: floaty 8s ease-in-out infinite;
+}
