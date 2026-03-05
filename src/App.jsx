@@ -1,102 +1,72 @@
-// src/App.jsx
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
-import Layout from "./layout/Layout";
-import ProtectedRoute from "./layout/ProtectedRoute";
+// Layouts
+import DashboardLayout from './components/dashboard/layout/DashboardLayout';
+import ProfileLayout from './components/dashboard/layout/ProfileLayout';
+import MentorLayout from './components/dashboard/layout/MentorLayout';
+import CodeGenerationLayout from './components/dashboard/layout/CodeGenerationLayout';
+import BacktestLayout from './components/dashboard/layout/BacktestLayout';
+import SignalsLayout from './components/dashboard/layout/SignalsLayout';
 
-// Public Pages
-import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import FooterPage from "./pages/FooterPage";
-import WhyPage from "./pages/WhyPage";
-import HowAIHelpsPage from "./pages/HowAIHelpsPage";
-import HowToUsePage from "./pages/HowToUsePage";
-import AboutPage from "./pages/AboutPage";
-import ContactPage from "./pages/ContactPage";
-import ServicesPage from "./pages/ServicesPage";
-import AboutOurStoryPage from "./pages/AboutOurStoryPage";
-import AboutVisionValuesPage from "./pages/AboutVisionValuesPage";
-import SecurityPrivacyPage from "./pages/SecurityPrivacyPage";
-import ContactSupportPage from "./pages/ContactSupportPage";
-import TeamNamesPage from "./pages/TeamNamesPage";
-import EmailConfirmedPage from "./pages/EmailConfirmedPage";
-
-// Protected Pages
-import DashboardPage from "./pages/DashboardPage";
-import TranscriptPage from "./pages/TranscriptPage";
-import SignalAnalysisPage from "./pages/SignalAnalysisPage";
-import MentorPage from "./pages/MentorPage";
-import StrategyLabPage from "./pages/StrategyLabPage";
-import BacktestPage from "./pages/BacktestPage";
-import LearningPage from "./pages/LearningPage";
-import HistoryPage from "./pages/HistoryPage";
-import SettingsPage from "./pages/SettingsPage";
+// Pages
+import Dashboard from './pages/dashboard/Dashboard';
+import Profile from './pages/dashboard/Profile/Profile';
+import ProfileEdit from './pages/dashboard/Profile/ProfileEdit';
+import ActivityLog from './pages/dashboard/Activity/ActivityLog';
+import MentorConversations from './pages/dashboard/Mentor/MentorConversations';
+import MentorMessages from './pages/dashboard/Mentor/MentorMessages';
+import CodeGeneration from './pages/dashboard/CodeGeneration/CodeGeneration';
+import Backtests from './pages/dashboard/Backtests/Backtests';
+import BacktestTrades from './pages/dashboard/Backtests/BacktestTrades';
+import Signals from './pages/dashboard/Signals/Signals';
 
 function App() {
-  const { user } = useSelector((state) => state.auth);
-
   return (
     <Router>
       <Routes>
-        {/* ================= PUBLIC ROUTES ================= */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/footer" element={<FooterPage />} />
-        <Route path="/why" element={<WhyPage />} />
-        <Route path="/how-ai-helps" element={<HowAIHelpsPage />} />
-        <Route path="/how-to-use" element={<HowToUsePage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/about/our-story" element={<AboutOurStoryPage />} />
-        <Route path="/about/vision-values" element={<AboutVisionValuesPage />} />
-        <Route path="/about/security" element={<SecurityPrivacyPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/contact/support" element={<ContactSupportPage />} />
-        <Route path="/services" element={<ServicesPage />} />
-        <Route path="/team" element={<TeamNamesPage />} />
-        <Route path="/backtest" element={<BacktestPage />} />
-        <Route path="/mentor" element={<MentorPage />} />
-        <Route path="/signals" element={<SignalAnalysisPage />} />
-        <Route path="/strategy" element={<StrategyLabPage />} />
-        <Route path="/transcript" element={<TranscriptPage />} />
-        <Route path="/auth/confirmed" element={<EmailConfirmedPage />} />
 
-        <Route
-          path="/login"
-          element={
-            user ? <Navigate to="/dashboard" replace /> : <LoginPage />
-          }
-        />
-
-        <Route
-          path="/register"
-          element={
-            user ? <Navigate to="/dashboard" replace /> : <RegisterPage />
-          }
-        />
-
-        {/* ================= PROTECTED ROUTES ================= */}
-        <Route path="/datadashboard" element={<Navigate to="/dashboard" replace />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<DashboardPage />} />
-          
-          
-          
-          <Route path="learning" element={<LearningPage />} />
-          <Route path="history" element={<HistoryPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+        {/* Dashboard Routes */}
+        <Route element={<DashboardLayout />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/activity" element={<ActivityLog />} />
         </Route>
 
-        {/* ================= FALLBACK ================= */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Profile Routes */}
+        <Route path="/profile" element={<ProfileLayout />}>
+          <Route index element={<Profile />} />
+          <Route path="edit" element={<ProfileEdit />} />
+        </Route>
+
+        {/* Mentor Routes */}
+        <Route path="/mentor" element={<MentorLayout />}>
+          <Route index element={<Navigate to="conversations" replace />} />
+          <Route path="conversations" element={<MentorConversations />} />
+          <Route path="messages/:conversationId" element={<MentorMessages />} />
+        </Route>
+
+        {/* Code Generation Routes */}
+        <Route path="/code" element={<CodeGenerationLayout />}>
+          <Route index element={<CodeGeneration />} />
+          <Route path="session/:sessionId" element={<CodeGeneration />} />
+        </Route>
+
+        {/* Backtests Routes */}
+        <Route path="/backtests" element={<BacktestLayout />}>
+          <Route index element={<Backtests />} />
+          <Route path=":backtestId" element={<Backtests />} />
+          <Route path=":backtestId/trades" element={<BacktestTrades />} />
+          <Route path="new" element={<Backtests />} />
+        </Route>
+
+        {/* Signals Routes */}
+        <Route path="/signals" element={<SignalsLayout />}>
+          <Route index element={<Signals />} />
+          <Route path=":signalId" element={<Signals />} />
+          <Route path="new" element={<Signals />} />
+        </Route>
+
       </Routes>
     </Router>
   );
