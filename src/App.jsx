@@ -11,6 +11,18 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import FooterPage from "./pages/FooterPage";
+import WhyPage from "./pages/WhyPage";
+import HowAIHelpsPage from "./pages/HowAIHelpsPage";
+import HowToUsePage from "./pages/HowToUsePage";
+import AboutPage from "./pages/AboutPage";
+import ContactPage from "./pages/ContactPage";
+import ServicesPage from "./pages/ServicesPage";
+import AboutOurStoryPage from "./pages/AboutOurStoryPage";
+import AboutVisionValuesPage from "./pages/AboutVisionValuesPage";
+import SecurityPrivacyPage from "./pages/SecurityPrivacyPage";
+import ContactSupportPage from "./pages/ContactSupportPage";
+import TeamNamesPage from "./pages/TeamNamesPage";
+import EmailConfirmedPage from "./pages/EmailConfirmedPage";
 
 // Protected Pages
 import DashboardPage from "./pages/DashboardPage";
@@ -32,6 +44,23 @@ function App() {
         {/* ================= PUBLIC ROUTES ================= */}
         <Route path="/" element={<HomePage />} />
         <Route path="/footer" element={<FooterPage />} />
+        <Route path="/why" element={<WhyPage />} />
+        <Route path="/how-ai-helps" element={<HowAIHelpsPage />} />
+        <Route path="/how-to-use" element={<HowToUsePage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/about/our-story" element={<AboutOurStoryPage />} />
+        <Route path="/about/vision-values" element={<AboutVisionValuesPage />} />
+        <Route path="/about/security" element={<SecurityPrivacyPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/contact/support" element={<ContactSupportPage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/team" element={<TeamNamesPage />} />
+        <Route path="/backtest" element={<BacktestPage />} />
+        <Route path="/mentor" element={<MentorPage />} />
+        <Route path="/signals" element={<SignalAnalysisPage />} />
+        <Route path="/strategy" element={<StrategyLabPage />} />
+        <Route path="/transcript" element={<TranscriptPage />} />
+        <Route path="/auth/confirmed" element={<EmailConfirmedPage />} />
 
         <Route
           path="/login"
@@ -48,6 +77,7 @@ function App() {
         />
 
         {/* ================= PROTECTED ROUTES ================= */}
+        <Route path="/datadashboard" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/dashboard"
           element={
@@ -57,11 +87,9 @@ function App() {
           }
         >
           <Route index element={<DashboardPage />} />
-          <Route path="transcript" element={<TranscriptPage />} />
-          <Route path="signals" element={<SignalAnalysisPage />} />
-          <Route path="mentor" element={<MentorPage />} />
-          <Route path="strategy" element={<StrategyLabPage />} />
-          <Route path="backtest" element={<BacktestPage />} />
+          
+          
+          
           <Route path="learning" element={<LearningPage />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="settings" element={<SettingsPage />} />

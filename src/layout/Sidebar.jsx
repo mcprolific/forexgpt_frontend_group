@@ -26,7 +26,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     >
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className="px-6 py-4 font-bold text-xl text-indigo-600 border-b">
+        <div className="px-6 py-4 font-bold text-xl text-indigo-600 border-b" style={{ fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.03em' }}>
           ForexGPT
         </div>
 
@@ -37,8 +37,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               key={item.name}
               to={item.path}
               className={({ isActive }) =>
-                `flex items-center gap-3 p-3 rounded-lg hover:bg-indigo-100 transition-colors ${
-                  isActive ? "bg-indigo-100 text-indigo-700 font-semibold" : "text-gray-700"
+                `flex items-center gap-3 p-3 rounded-lg hover:bg-indigo-100 transition-colors ${isActive ? "bg-indigo-100 text-indigo-700 font-semibold" : "text-gray-700"
                 }`
               }
             >

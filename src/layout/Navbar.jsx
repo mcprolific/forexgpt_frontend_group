@@ -16,7 +16,7 @@ const Navbar = ({ toggleSidebar }) => {
       </button>
 
       <div className="flex-1 flex justify-center md:justify-start">
-        <h1 className="text-xl font-bold text-gray-800">ForexGPT</h1>
+        <h1 className="text-xl font-bold text-gray-100">ForexGPT</h1>
       </div>
 
       <div className="flex items-center gap-4">

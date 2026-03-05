@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --color-gold: #D4AF37;
+        --color-gold-light: #FFD700;
+        --color-charcoal: #1A1A1A;
+    }
+
+    * {
+        font-family: 'Outfit', sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    body {
+        @apply bg-[#1A1A1A] text-white antialiased;
+        background-color: #1A1A1A !important;
+        line-height: 1.6;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        @apply text-[#D4AF37] font-bold;
+        color: #D4AF37 !important;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+
+    /* Default text colors to white */
+    p,
+    span,
+    div,
+    li,
+    a,
+    label,
+    input,
+    textarea,
+    select,
+    button {
+        @apply text-white;
+        letter-spacing: 0.01em;
+    }
+
+    /* Standard Gold Gradient for main headings */
+    .text-gold-gradient {
+        @apply bg-clip-text text-transparent !important;
+        background-image: linear-gradient(135deg, #FFD700 0%, #D4AF37 40%, #ffffff 60%, #D4AF37 80%, #FFD700 100%) !important;
+        -webkit-background-clip: text !important;
+        background-clip: text !important;
+    }
+}
+
+@layer utilities {
+    .dot-grid {
+        background-image: radial-gradient(rgba(212, 175, 55, 0.15) 1px, transparent 1px);
+        background-size: 32px 32px;
+    }
+
+    .noise-overlay {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        opacity: 0.03;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   WHITE / LIGHT MODE OVERRIDES
+   These rules are outside @layer so they win over
+   everything inside @layer base and @layer utilities
+   ═══════════════════════════════════════════════ */
+
+/* Body background + base text */
+:root.light body {
+    background-color: #F0EDE6 !important;
+    color: #1A1A1A !important;
+}
+
+/* Headings — swap gold → charcoal */
+:root.light h1,
+:root.light h2,
+:root.light h3,
+:root.light h4,
+:root.light h5,
+:root.light h6 {
+    color: #1A1A1A !important;
+}
+
+/* All generic elements — inherit dark body color
+   (inline style props and !important rules still override this) */
+:root.light p,
+:root.light span,
+:root.light div,
+:root.light li,
+:root.light a,
+:root.light label,
+:root.light input,
+:root.light textarea,
+:root.light select,
+:root.light button {
+    color: inherit;
+}
+
+/* Keep gradient/transparent text working */
+:root.light .text-transparent,
+:root.light [class*="bg-clip-text"] {
+    color: transparent !important;
+}
+
+/* Keep gold gradient text */
+:root.light .text-gold-gradient {
+    color: transparent !important;
+}
+
+/* Flip generic dark card & section backgrounds */
+:root.light .bg-white\/\[0\.03\],
+:root.light .bg-white\/5,
+:root.light .bg-white\/\[0\.05\] {
+    background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Flip glass borders from light-on-dark → dark-on-light */
+:root.light .border-white\/\[0\.08\],
+:root.light .border-white\/5,
+:root.light .border-white\/10 {
+    border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Ensure placeholder text stays muted in light mode */
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+    color: #9ca3af !important;
+}

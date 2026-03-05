@@ -2,9 +2,17 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { loginAPI, registerAPI } from "./authAPI";
 
 const storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+const storedUser = typeof localStorage !== "undefined" ? (() => {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+})() : null;
 
 const initialState = {
-  user: null,
+  user: storedUser,
   token: storedToken,
   loading: false,
   error: null,
@@ -47,6 +55,7 @@ const authSlice = createSlice({
       state.token = null;
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
       }
     },
   },
@@ -64,6 +73,13 @@ const authSlice = createSlice({
         if (token && typeof localStorage !== "undefined") {
           localStorage.setItem("token", token);
         }
+        if (user && typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem("user", JSON.stringify(user));
+          } catch {
+            // ignore
+          }
+        }
         state.token = token || state.token;
         state.user = user || state.user;
       })
@@ -75,16 +91,10 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(registerUser.fulfilled, (state, action) => {
+      .addCase(registerUser.fulfilled, (state) => {
         state.loading = false;
         state.error = null;
-        const token = action.payload?.token || null;
-        const user = action.payload?.user || null;
-        if (token && typeof localStorage !== "undefined") {
-          localStorage.setItem("token", token);
-        }
-        state.token = token || state.token;
-        state.user = user || state.user;
+        // Do not auto-login after registration; require explicit login
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false;

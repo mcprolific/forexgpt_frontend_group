@@ -1,27 +1,31 @@
 import { useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { setUser, logoutUser } from "../features/auth/authSlice";
-import axiosInstance from "../services/axiosInstance";
 
 const useAuth = () => {
   const dispatch = useDispatch();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const rawUser = typeof localStorage !== "undefined" ? localStorage.getItem("user") : null;
+    if (token) {
       try {
-        const res = await axiosInstance.get("/auth/me");
-        dispatch(setUser(res.data));
+        const parsed = rawUser ? JSON.parse(rawUser) : null;
+        if (parsed) dispatch(setUser(parsed));
       } catch {
-        dispatch(logoutUser());
-      } finally {
-        setLoading(false);
+        // ignore parse errors
       }
-    })();
+      setTimeout(() => setLoading(false), 0);
+    } else {
+      dispatch(logoutUser());
+      setTimeout(() => setLoading(false), 0);
+    }
   }, [dispatch]);
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     dispatch(logoutUser());
     window.location.href = "/login";
   };

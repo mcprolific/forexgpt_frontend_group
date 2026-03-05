@@ -5,7 +5,7 @@ const SignalResultCard = ({ symbol, direction, confidence, rationale }) => {
     <div className="bg-white rounded-xl shadow p-4">
       <div className="flex items-center justify-between">
         <div className="font-semibold">{symbol}</div>
-        <div className={`text-sm font-medium ${direction === "BUY" ? "text-green-600" : "text-red-600"}`}>{direction}</div>
+        <div className={`text-sm font-medium ${direction === "BUY" ? "text-[#D4AF37]" : "text-red-600"}`}>{direction}</div>
       </div>
       <div className="mt-2 text-sm text-gray-600">{rationale}</div>
       <div className="mt-3">

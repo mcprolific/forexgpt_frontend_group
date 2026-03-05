@@ -4,7 +4,7 @@ import axiosInstance from "../../services/axiosInstance";
  * Generate AI Signal
  */
 export const generateSignalAPI = async (payload) => {
-  const response = await axiosInstance.post("/signals/generate", payload);
+  const response = await axiosInstance.post("/signals/extract", payload);
   return response.data;
 };
 

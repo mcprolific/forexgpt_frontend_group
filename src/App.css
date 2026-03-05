@@ -1,26 +1,570 @@
 @import "tailwindcss";
 
+/* ── Global Typography ─────────────────────────────────── */
+*,
+*::before,
+*::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Brand name styling helper */
+.font-brand {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+/* Script/display headlines */
+.font-script {
+  font-family: cursive;
+}
+
 /* Animated gradient background helper */
 @keyframes gradient-move {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .animate-gradient {
-  background: linear-gradient(120deg, rgba(99,102,241,0.25), rgba(56,189,248,0.25), rgba(236,72,153,0.25));
+  background: linear-gradient(120deg, rgba(99, 102, 241, 0.25), rgba(56, 189, 248, 0.25), rgba(236, 72, 153, 0.25));
   background-size: 200% 200%;
   animation: gradient-move 12s ease infinite;
 }
 
 /* Floating blob accents */
 @keyframes floaty {
-  0% { transform: translateY(0) translateX(0) scale(1); }
-  50% { transform: translateY(-12px) translateX(6px) scale(1.05); }
-  100% { transform: translateY(0) translateX(0) scale(1); }
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-12px) translateX(6px) scale(1.05);
+  }
+
+  100% {
+    transform: translateY(0) translateX(0) scale(1);
+  }
 }
+
 .blob {
   filter: blur(40px);
   opacity: 0.5;
   animation: floaty 8s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-150%);
+  }
+
+  100% {
+    transform: translateX(150%);
+  }
+}
+
+.shine {
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.28), rgba(255, 215, 0, 0.18), transparent);
+  will-change: transform;
+  animation: sweep 5.5s ease-in-out infinite;
+  mix-blend-mode: screen;
+  opacity: 0.8;
+}
+
+.noise-overlay {
+  background-image: radial-gradient(rgba(212, 175, 55, 0.04) 1px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: 0.40;
+  mix-blend-mode: overlay;
+}
+
+.dot-grid {
+  background-image:
+    linear-gradient(rgba(212, 175, 55, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(212, 175, 55, 0.07) 1px, transparent 1px);
+  background-size: 56px 56px, 56px 56px;
+  background-position: -1px -1px, -1px -1px;
+  opacity: 0.18;
+}
+
+/* ── Navbar Effects ────────────────────────────────────── */
+
+/* Gold sliding underline for nav links */
+.nav-link {
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #D4AF37, #FFD700);
+  border-radius: 999px;
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nav-link:hover::after {
+  width: 70%;
+  left: 15%;
+}
+
+.nav-link:active {
+  transform: scale(0.96);
+}
+
+/* Auth button shimmer sweep */
+@keyframes btn-shimmer {
+  0% {
+    left: -100%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.btn-glow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: none;
+}
+
+.btn-glow:hover::after {
+  animation: btn-shimmer 0.6s ease-out;
+}
+
+.btn-glow:active {
+  transform: scale(0.95);
+}
+
+/* Gold outline button hover glow */
+.btn-outline-gold {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.btn-outline-gold:hover {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.25), inset 0 0 20px rgba(212, 175, 55, 0.06);
+}
+
+.btn-outline-gold:active {
+  transform: scale(0.95);
+}
+
+/* Flyout card premium hover */
+.flyout-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.flyout-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.flyout-card:hover::before {
+  opacity: 1;
+}
+
+.flyout-card:hover {
+  background: rgba(212, 175, 55, 0.08);
+  border-color: rgba(212, 175, 55, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.1);
+}
+
+.flyout-card:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Mobile link slide-in indicator */
+.mobile-nav-link {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 60%;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #D4AF37, #FFD700);
+  transition: width 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-nav-link:hover::before {
+  width: 3px;
+}
+
+.mobile-nav-link:hover {
+  padding-left: 12px;
+}
+
+.mobile-nav-link:active {
+  opacity: 0.7;
+}
+
+/* Logo hover pulse */
+.logo-hover {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.logo-hover:hover {
+  filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.5));
+  transform: scale(1.05);
+}
+
+.logo-hover:active {
+  transform: scale(0.97);
+}
+
+/* Hamburger animation */
+.hamburger-btn {
+  transition: all 0.2s ease;
+}
+
+.hamburger-btn:hover {
+  background: rgba(212, 175, 55, 0.12);
+  color: #FFD700;
+}
+
+
+.hamburger-btn:active {
+  transform: scale(0.9);
+}
+
+/* ═══════════════════════════════════════════════
+   WHITE / LIGHT MODE OVERRIDES
+   These normal-layer rules beat @layer base + utilities
+   ═══════════════════════════════════════════════ */
+
+/* Body */
+:root.light body {
+  background-color: #F0EDE6 !important;
+  color: #1A1A1A !important;
+}
+
+/* Headings → charcoal instead of gold */
+:root.light h1,
+:root.light h2,
+:root.light h3,
+:root.light h4,
+:root.light h5,
+:root.light h6 {
+  color: #1A1A1A !important;
+}
+
+/* ── Tailwind white text classes → dark equivalents in light mode ──────────
+   These would produce white text on white background without these overrides. */
+:root.light .text-white {
+  color: #1A1A1A !important;
+}
+
+:root.light .text-white\/90 {
+  color: rgba(26, 26, 26, 0.90) !important;
+}
+
+:root.light .text-white\/80 {
+  color: rgba(26, 26, 26, 0.85) !important;
+}
+
+:root.light .text-white\/70 {
+  color: rgba(26, 26, 26, 0.75) !important;
+}
+
+:root.light .text-white\/60 {
+  color: rgba(26, 26, 26, 0.65) !important;
+}
+
+:root.light .text-white\/50 {
+  color: rgba(26, 26, 26, 0.55) !important;
+}
+
+:root.light .text-white\/40 {
+  color: rgba(26, 26, 26, 0.45) !important;
+}
+
+/* Near-white/light-gray Tailwind text classes → much darker for contrast */
+:root.light .text-gray-100 {
+  color: #1A1A1A !important;
+}
+
+:root.light .text-gray-200 {
+  color: #374151 !important;
+}
+
+:root.light .text-gray-300 {
+  color: #374151 !important;
+}
+
+:root.light .text-gray-400 {
+  color: #4b5563 !important;
+}
+
+:root.light .text-gray-500 {
+  color: #4b5563 !important;
+}
+
+:root.light .text-gray-600 {
+  color: #4b5563 !important;
+}
+
+/* All other generic elements — inherit from the now-dark body */
+:root.light p,
+:root.light span,
+:root.light div,
+:root.light li,
+:root.light a,
+:root.light label,
+:root.light input,
+:root.light textarea,
+:root.light select,
+:root.light button {
+  color: inherit;
+}
+
+
+/* Gradient headings — fix the white-in-gradient that vanishes on light bg.
+   Any element using bg-clip-text gets a dark-gold gradient so h1/h2 are readable. */
+:root.light .bg-clip-text {
+  background-image: linear-gradient(135deg, #9a7d30, #D4AF37) !important;
+}
+
+/* Keep text-transparent so the bg-clip-text trick still works */
+:root.light .text-transparent {
+  color: transparent !important;
+}
+
+/* Gold-gradient spans (text-gold-gradient) */
+:root.light .text-gold-gradient {
+  background-image: linear-gradient(135deg, #9a7d30, #D4AF37) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+/* ── Inline-style pale-gold colors → readable dark gold ────────────────────
+   CSS [style*="..."] selectors can target inline styles partially. */
+
+/* #F0D880 — very pale gold card titles */
+:root.light [style*="#F0D880"] {
+  color: #9a7d30 !important;
+}
+
+:root.light [style*="F0D880"] {
+  color: #9a7d30 !important;
+}
+
+/* #C8A94A — medium gold subtitles */
+:root.light [style*="#C8A94A"] {
+  color: #9a7d30 !important;
+}
+
+:root.light [style*="C8A94A"] {
+  color: #9a7d30 !important;
+}
+
+/* #A89060 — muted tan descriptions */
+:root.light [style*="#A89060"] {
+  color: #4b5563 !important;
+}
+
+:root.light [style*="A89060"] {
+  color: #4b5563 !important;
+}
+
+/* #7A6830 — dark gold muted text */
+:root.light [style*="#7A6830"] {
+  color: #4b5563 !important;
+}
+
+:root.light [style*="7A6830"] {
+  color: #4b5563 !important;
+}
+
+/* Force ALL h3 headings to legible dark gold (overrides remaining pale inline styles) */
+:root.light h3 {
+  color: #9a7d30 !important;
+}
+
+:root.light h4 {
+  color: #9a7d30 !important;
+}
+
+/* Restore headings that should stay black (section titles, etc.) */
+:root.light h1,
+:root.light h2 {
+  color: #1A1A1A !important;
+}
+
+/* But if h1/h2 use bg-clip-text trick, color should be transparent */
+:root.light h1.text-transparent,
+:root.light h2.text-transparent {
+  color: transparent !important;
+}
+
+
+/* Input placeholders */
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Glass card backgrounds: white/[x] → subtle dark tint */
+:root.light .bg-white\/\[0\.02\] {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+:root.light .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+:root.light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:root.light .bg-white\/\[0\.05\] {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:root.light .bg-white\/\[0\.06\] {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+:root.light .bg-white\/\[0\.07\] {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+:root.light .bg-white\/\[0\.08\] {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+:root.light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Glass borders: white → dark */
+:root.light .border-white\/\[0\.05\] {
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+:root.light .border-white\/\[0\.06\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:root.light .border-white\/\[0\.07\] {
+  border-color: rgba(0, 0, 0, 0.09) !important;
+}
+
+:root.light .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+:root.light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:root.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Dark section backgrounds → light equivalents */
+:root.light .bg-\[\#121212\] {
+  background-color: #ffffff !important;
+}
+
+:root.light .bg-\[\#1A1A1A\] {
+  background-color: #F0EDE6 !important;
+}
+
+:root.light .bg-\[\#1e1e1e\] {
+  background-color: #ffffff !important;
+}
+
+:root.light .bg-\[\#2a2a2a\] {
+  background-color: #F5F2EC !important;
+}
+
+:root.light .bg-\[\#0A0A0A\] {
+  background-color: #F0EDE6 !important;
+}
+
+/* Muted text colors → darken for light backgrounds */
+:root.light .text-gray-400 {
+  color: #4b5563 !important;
+}
+
+:root.light .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+:root.light .text-gray-600 {
+  color: #374151 !important;
+}
+
+/* Backdrop blur overlays */
+:root.light .bg-black\/30 {
+  background-color: rgba(255, 255, 255, 0.80) !important;
+}
+
+:root.light .bg-black\/50 {
+  background-color: rgba(240, 237, 230, 0.80) !important;
+}
+
+:root.light .bg-zinc-900\/95 {
+  background-color: rgba(255, 255, 255, 0.97) !important;
 }

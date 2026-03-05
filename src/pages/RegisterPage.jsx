@@ -1,16 +1,26 @@
 // src/pages/RegisterPage.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
 import { registerUser } from "../features/auth/authSlice";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
+import Toast from "../components/ui/Toast";
+import useToast from "../hooks/useToast";
+import axiosInstance from "../services/axiosInstance";
+import { useTheme } from "../context/ThemeContext";
+import Logo from "../assets/logo.png";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 
 const RegisterPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error } = useSelector((state) => state.auth);
+  const { loading } = useSelector((state) => state.auth);
+  const { toast, show } = useToast();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+  const [formError, setFormError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -21,19 +31,21 @@ const RegisterPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [preferredLanguage, setPreferredLanguage] = useState(
-    localStorage.getItem("preferredLanguage") || "yo"
-  );
-  const [localError, setLocalError] = useState(null);
   const [capsPassword, setCapsPassword] = useState(false);
-  const [capsConfirm, setCapsConfirm] = useState(false);
-  const [role, setRole] = useState(localStorage.getItem("role") || "learner");
-  const [newsletter, setNewsletter] = useState(
-    localStorage.getItem("newsletter_opt_in") === "true"
-  );
-  const [referral, setReferral] = useState(
-    localStorage.getItem("referral_code") || ""
-  );
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const [confirmNotice, setConfirmNotice] = useState("");
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    const id = setInterval(() => {
+      const left = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setCooldownLeft(left);
+      if (left <= 0) {
+        setCooldownUntil(0);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
 
   const handleChange = (e) => {
     setForm({
@@ -86,340 +98,473 @@ const RegisterPage = () => {
     /[a-z]/.test(form.password) &&
     /\d/.test(form.password);
   const isConfirmMatch = confirmPassword === form.password;
-  const isSubmitDisabled = useMemo(
-    () =>
-      loading ||
-      !isNameValid ||
-      !isEmailValid ||
-      !isPasswordValid ||
-      !isConfirmMatch ||
-      !accepted,
-    [loading, isNameValid, isEmailValid, isPasswordValid, isConfirmMatch, accepted]
-  );
 
-  const generatePassword = () => {
-    const chars =
-      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()_+[]{}";
-    let out = "";
-    for (let i = 0; i < 14; i++) {
-      out += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setForm({ ...form, password: out });
-    setConfirmPassword(out);
-  };
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"];
+  const strengthColor = ["", "bg-red-500", "bg-amber-500", "bg-blue-400", "bg-[#22c55e]"];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLocalError(null);
+    setFormError("");
+
+    if (cooldownLeft > 0) {
+      setFormError(`Too many attempts. Please wait ${cooldownLeft}s before trying again.`);
+      return;
+    }
+
+    // Validation checks with descriptive feedback
+    if (!form.name.trim()) {
+      setFormError("Full identifier is required for account creation.");
+      return;
+    }
     if (!isNameValid) {
-      setLocalError("Enter your full name");
+      setFormError("Identity verification failed: Name must be at least 2 characters.");
+      return;
+    }
+    if (!form.email.trim()) {
+      setFormError("Institutional email credentials are required for entry.");
       return;
     }
     if (!isEmailValid) {
-      setLocalError("Enter a valid email address");
+      setFormError("Authorization failed: Invalid email format detected.");
+      return;
+    }
+    if (!form.password) {
+      setFormError("Security key is required for account initialization.");
       return;
     }
     if (!isPasswordValid) {
-      setLocalError("Use 8+ chars with upper, lower and a number");
+      setFormError("Security protocol failed: Password must be 8+ chars with upper, lower and numeric requirements.");
+      return;
+    }
+    if (!confirmPassword) {
+      setFormError("Please re-enter your security key for verification.");
       return;
     }
     if (!isConfirmMatch) {
-      setLocalError("Passwords do not match");
+      setFormError("Security mismatch: Password confirmation does not match.");
       return;
     }
     if (!accepted) {
-      setLocalError("You must accept Terms to continue");
+      setFormError("Agreement to the educational research protocols is required to proceed.");
       return;
     }
-    localStorage.setItem("preferredLanguage", preferredLanguage);
-    localStorage.setItem("role", role);
-    localStorage.setItem("newsletter_opt_in", String(newsletter));
-    if (referral) localStorage.setItem("referral_code", referral);
-    const result = await dispatch(registerUser({ ...form, role }));
 
-    if (result.meta.requestStatus === "fulfilled") {
-      navigate("/dashboard");
+    const payload = {
+      email: form.email.trim(),
+      password: form.password,
+      display_name: form.name.trim(),
+    };
+
+    try {
+      const res = await dispatch(registerUser(payload)).unwrap();
+      if (res?.requires_confirmation) {
+        setConfirmNotice(res?.email || "");
+      } else {
+        show("Registration successful. You can now log in.", "success");
+        navigate("/login");
+      }
+    } catch (err) {
+      const msg = typeof err === "string" ? err : "Registration failed. Please verify your connection to the secure server.";
+      setFormError(msg);
+      if (typeof err === "string" && /too many/i.test(err)) {
+        setCooldownUntil(Date.now() + 60_000);
+      }
     }
   };
 
+
   return (
     <>
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-b from-white to-slate-50 p-6 pt-24 pb-24">
-      <div className="fixed top-0 left-0 right-0 z-40"><PublicNavbar /></div>
-      
-      <Motion.div
-        className="pointer-events-none absolute -top-24 -left-40 h-96 w-96 rounded-full bg-gradient-to-tr from-white/70 via-white/50 to-white/30 blur-3xl shadow-xl ring-1 ring-white/50"
-        animate={{ y: [0, -18, 0], x: [0, 12, 0] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <Motion.div
-        className="pointer-events-none absolute -bottom-32 -right-40 h-[28rem] w-[28rem] rounded-full bg-gradient-to-tr from-white/60 via-white/40 to-white/20 blur-3xl shadow-xl ring-1 ring-white/50"
-        animate={{ y: [0, 16, 0], x: [0, -10, 0] }}
-        transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <Motion.div
-        className="pointer-events-none absolute inset-[-25%] rounded-full"
-        style={{
-          background:
-            "conic-gradient(from 180deg at 50% 50%, rgba(255,255,255,0.28), rgba(255,255,255,0.18), rgba(255,255,255,0.12), rgba(255,255,255,0.28))",
-          filter: "blur(80px)",
-          opacity: 0.6,
-        }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 90, repeat: Infinity, ease: "linear" }}
-      />
-      <div className="pointer-events-none absolute inset-0 [background:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
-      <Motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative bg-white/90 backdrop-blur shadow-2xl rounded-2xl w-full max-w-md p-8 border border-white/60"
+      <div
+        className="relative min-h-screen flex items-center justify-center overflow-hidden p-6 pt-24 pb-20 text-white selection:bg-[#D4AF37]/30 transition-colors duration-500"
+        style={{ background: isLight ? "#F0EDE6" : "#1A1A1A" }}
       >
-        <h2 className="text-3xl font-bold text-indigo-600 mb-2 text-center">
-          Create Learning Account
-        </h2>
-        <p className="mb-4 text-center text-xs text-amber-700">
-          Educational use only. Not financial advice. Not intended for live trading or developer workflows.
-        </p>
+        <div className="fixed top-0 left-0 right-0 z-50"><PublicNavbar /></div>
 
-        {error && (
-          <div role="alert" aria-live="assertive" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        )}
-        {localError && (
-          <div role="alert" aria-live="assertive" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {localError}
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label htmlFor="name" className="sr-only">Full Name</label>
-          <input
-            id="name"
-            type="text"
-            name="name"
-            placeholder="Full Name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            autoFocus
-            autoComplete="name"
-            aria-invalid={!isNameValid}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none"
-          />
+        {/* Premium Background Elements */}
+        <Motion.div
+          className="pointer-events-none absolute inset-0"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.5 }}
+          style={{
+            backgroundImage:
+              "radial-gradient(1200px 600px at 20% -10%, rgba(212,175,55,0.15), transparent 70%), radial-gradient(1000px 500px at 80% 20%, rgba(255,215,0,0.1), transparent 70%), radial-gradient(800px 400px at 50% 110%, rgba(212,175,55,0.08), transparent 70%)",
+          }}
+        />
 
-          <div>
-            <label htmlFor="email" className="sr-only">Email Address</label>
-            <input
-              id="email"
-              type="email"
-              name="email"
-              placeholder="Email Address"
-              value={form.email}
-              onChange={handleChange}
-              required
-              autoComplete="email"
-              aria-invalid={!isEmailValid}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none ${
-                isEmailValid
-                  ? "focus:ring-indigo-400"
-                  : "focus:ring-red-400 border-red-300"
-              }`}
-            />
-            {emailSuggestion && (
-              <button
-                type="button"
-                onClick={() =>
-                  setForm({ ...form, email: emailSuggestion })
-                }
-                className="mt-1 text-xs text-indigo-700 hover:underline"
-              >
-                Did you mean {emailSuggestion}?
-              </button>
-            )}
-          </div>
+        {/* Animated Glow Orbs */}
+        <Motion.div
+          className="pointer-events-none absolute top-[-10%] left-[-5%] h-[40rem] w-[40rem] rounded-full bg-[#D4AF37]/5 blur-[120px]"
+          animate={{ x: [0, 30, 0], y: [0, 40, 0], scale: [1, 1.1, 1] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <Motion.div
+          className="pointer-events-none absolute bottom-[-10%] right-[-5%] h-[35rem] w-[35rem] rounded-full bg-[#D4AF37]/3 blur-[100px]"
+          animate={{ x: [0, -40, 0], y: [0, -30, 0], scale: [1, 1.15, 1] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+        />
 
-          <div className="relative">
-            <label htmlFor="password" className="sr-only">Password</label>
-            <input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Password"
-              value={form.password}
-              onChange={handleChange}
-              onKeyUp={(e) =>
-                setCapsPassword(e.getModifierState && e.getModifierState("CapsLock"))
-              }
-              required
-              autoComplete="new-password"
-              aria-describedby="passwordHelp"
-              aria-invalid={!isPasswordValid}
-              className={`w-full px-4 py-3 pr-32 border rounded-lg focus:ring-2 outline-none ${
-                isPasswordValid
-                  ? "focus:ring-indigo-400"
-                  : "focus:ring-yellow-400"
-              }`}
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="text-sm text-indigo-600"
+        {/* Grid Pattern Overlay */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+
+        <Motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center"
+        >
+          {/* Left Side: User Assistance / Value Proposition */}
+          <div className="lg:col-span-7 space-y-8 pr-0 lg:pr-10">
+            <div className="space-y-4">
+              <Motion.h1
+                className="text-4xl md:text-5xl lg:text-6xl font-black leading-tight"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                style={{ fontFamily: "'Outfit', sans-serif" }}
               >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-              <button
-                type="button"
-                onClick={generatePassword}
-                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-              >
-                Generate
-              </button>
+                Join the <span className="bg-gradient-to-r from-[#FFD700] to-[#D4AF37] bg-clip-text text-transparent">Elite Quant</span> Community
+              </Motion.h1>
+              <p className="text-gray-400 text-lg max-w-xl">
+                Experience the next generation of trading. Our AI doesn't just give signals it provides comprehensive market intelligence.
+              </p>
             </div>
-            <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all ${
-                  strength <= 1
-                    ? "bg-red-400 w-1/4"
-                    : strength === 2
-                    ? "bg-yellow-400 w-1/2"
-                    : strength === 3
-                    ? "bg-blue-400 w-3/4"
-                    : "bg-green-500 w-full"
-                }`}
-              />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {[
+                { title: "AI Confluence", desc: "Aggregated intelligence from technicals, news, and sentiment.", icon: "" },
+                { title: "Institutional Risk", desc: "Professional-grade position sizing and automated risk checks.", icon: "" },
+                { title: "Strategy Mentor", desc: "Step-by-step guidance to master high-probability setups.", icon: "" },
+                { title: "Live Sync", desc: "Real-time updates across London, NY, and Tokyo sessions.", icon: "" }
+              ].map((feat, i) => (
+                <Motion.div
+                  key={feat.title}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + (i * 0.1) }}
+                  className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] transition-colors"
+                >
+                  <div className="text-2xl mb-3">{feat.icon}</div>
+                  <h3 className="font-bold text-[#F0D880] mb-1">{feat.title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{feat.desc}</p>
+                </Motion.div>
+              ))}
             </div>
-            {capsPassword && (
-              <div className="mt-1 text-xs text-amber-700">
-                Caps Lock is on
+
+            <div className="pt-4 flex items-center gap-4 text-sm text-[#fff]/100">
+              <div className="flex -space-x-3">
+                {[1, 2, 3, 4].map(n => (
+                  <div key={n} className="w-8 h-8 rounded-full border-2 border-[#D4AF37] bg-zinc-800 flex items-center justify-center text-[10px] uppercase font-bold">
+                    {String.fromCharCode(64 + n)}
+                  </div>
+                ))}
               </div>
-            )}
-            <p id="passwordHelp" className="mt-1 text-xs text-gray-500">
-              Use at least 8 characters with upper, lower and a number.
+              <span>Joined by 12,000+ traders globally</span>
+            </div>
+          </div>
+
+          {/* Right Side: The Form */}
+          <div className="lg:col-span-5 relative group">
+            {/* Card Glow Effect */}
+            <div className="pointer-events-none absolute -inset-0.5 bg-gradient-to-r from-[#D4AF37]/20 via-[#FFD700]/10 to-[#D4AF37]/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
+
+            <div
+              className="relative z-10 backdrop-blur-2xl p-8 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border w-full transition-colors duration-500"
+              style={{
+                background: isLight ? "rgba(255,255,255,0.95)" : "rgba(18,18,18,0.90)",
+                borderColor: isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.05)"
+              }}
+            >
+              {/* Logo */}
+              <div className="flex items-center justify-center gap-1.5 mb-5">
+                <img src={Logo} alt="ForexGPT" className="h-8 w-8 object-contain" />
+                <span
+                  className="text-lg font-black transition-colors duration-300"
+                  style={{ fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.03em', color: isLight ? '#1A1A1A' : '#ffffff' }}
+                >ForexGPT</span>
+              </div>
+
+              <div className="mb-8 text-center">
+                <h2 className="text-2xl font-black mb-1" style={{ fontFamily: "'Outfit', sans-serif", color: isLight ? '#1A1A1A' : '#ffffff' }}>
+                  Create Account
+                </h2>
+              </div>
+
+              {formError && (
+                <div
+                  role="alert"
+                  className="mb-6 rounded-xl border border-red-400/30 bg-red-900/20 backdrop-blur px-5 py-4 text-center shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                >
+                  <div className="text-sm md:text-base font-semibold text-red-300">{formError}</div>
+                  {cooldownLeft > 0 && (
+                    <div className="mt-2 text-xs text-red-200">
+                      Please wait {cooldownLeft}s before trying again.
+                    </div>
+                  )}
+                </div>
+              )}
+              {confirmNotice && (
+                <div
+                  role="status"
+                  className="mb-6 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 backdrop-blur px-5 py-4 text-center shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                >
+                  <div className="text-sm md:text-base font-semibold" style={{ color: isLight ? '#7A6830' : '#F0D880' }}>
+                    Confirmation email sent to {confirmNotice}. Please check your mail to verify your account.
+                  </div>
+                  <Link
+                    to="/auth/confirmed"
+                    className="inline-block mt-3 px-4 py-2 rounded-lg font-bold text-xs tracking-widest transition-all duration-200"
+                    style={{ background: "linear-gradient(135deg, #FFD700, #D4AF37)", color: "#1A1A1A" }}
+                  >
+                    I confirmed — Go to Login
+                  </Link>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Full Name */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </span>
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={form.name}
+                      onChange={handleChange}
+                      placeholder="Publica Academy"
+                      autoFocus
+                      className="w-full border rounded-xl pl-10 pr-4 h-12 text-sm placeholder:text-gray-500 focus:outline-none transition-colors"
+                      style={{
+                        background: isLight ? '#F5F2EC' : '#2a2a2a',
+                        borderColor: isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.08)',
+                        color: isLight ? '#111' : '#fff',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </span>
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="ncc@gmail.com"
+                      className="w-full border rounded-xl pl-10 pr-4 h-12 text-sm placeholder:text-gray-500 focus:outline-none transition-colors"
+                      style={{
+                        background: isLight ? '#F5F2EC' : '#2a2a2a',
+                        borderColor: form.email && !isEmailValid ? 'rgba(239,68,68,0.6)' : isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.08)',
+                        color: isLight ? '#111' : '#fff',
+                      }}
+                    />
+                  </div>
+                  {form.email && !isEmailValid && (
+                    <p className="mt-1 text-[10px] text-red-400">Invalid email format</p>
+                  )}
+                  {emailSuggestion && (
+                    <p className="mt-1 text-[10px] text-[#22c55e]">Did you mean {emailSuggestion}?</p>
+                  )}
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Password
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </span>
+                    <input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={handleChange}
+                      onKeyUp={(e) => setCapsPassword(e.getModifierState && e.getModifierState("CapsLock"))}
+                      placeholder="••••••••"
+                      className="w-full border rounded-xl pl-10 pr-14 h-12 text-sm placeholder:text-gray-500 focus:outline-none transition-colors"
+                      style={{
+                        background: isLight ? '#F5F2EC' : '#2a2a2a',
+                        borderColor: isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.08)',
+                        color: isLight ? '#111' : '#fff',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#D4AF37] hover:text-[#FFD700] transition-colors"
+                    >
+                      {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {capsPassword && (
+                    <p className="mt-1 text-[10px] text-amber-500 font-bold uppercase tracking-tight">Caps Lock is ON</p>
+                  )}
+                  {/* Strength bar */}
+                  {form.password && (
+                    <div className="mt-2 space-y-1">
+                      <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                        <Motion.div
+                          className={`h-full ${strengthColor[strength]} transition-all duration-500`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(strength / 4) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-600">{strengthLabel[strength]}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </span>
+                    <input
+                      id="confirmPassword"
+                      type={showConfirm ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full border rounded-xl pl-10 pr-14 h-12 text-sm placeholder:text-gray-500 focus:outline-none transition-colors"
+                      style={{
+                        background: isLight ? '#F5F2EC' : '#2a2a2a',
+                        borderColor: confirmPassword && !isConfirmMatch ? 'rgba(239,68,68,0.6)' : isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.08)',
+                        color: isLight ? '#111' : '#fff',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm((v) => !v)}
+                      aria-label={showConfirm ? "Hide password" : "Show password"}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#D4AF37] hover:text-[#FFD700] transition-colors"
+                    >
+                      {showConfirm ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {confirmPassword && !isConfirmMatch && (
+                    <p className="mt-1 text-[10px] text-red-400">Passwords don't match</p>
+                  )}
+                  {confirmPassword && isConfirmMatch && (
+                    <p className="mt-1 text-[10px] text-[#22c55e]">✓ Passwords match</p>
+                  )}
+                </div>
+
+                {/* Terms */}
+                <div className="pt-1">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={accepted}
+                      onChange={(e) => setAccepted(e.target.checked)}
+                      className="mt-0.5 w-3.5 h-3.5 rounded border-white/20 bg-[#2a2a2a] accent-[#22c55e] cursor-pointer flex-shrink-0"
+                    />
+                    <span className="text-[10px] text-[#FFF] leading-relaxed">
+                      I agree to the{" "}
+                      <Link to="/about/security" className="text-[#D4AF37] hover:text-[#FFD700] transition-colors">Terms of Service</Link>
+                      {" "}and acknowledge results are based on educational research.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Sign Up button */}
+                <button
+                  type="submit"
+                  disabled={loading || cooldownLeft > 0}
+                  className="w-full h-12 rounded-xl font-black text-sm uppercase tracking-[0.15em] text-black transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ background: "linear-gradient(135deg, #D4AF37, #D4AF37)" }}
+                >
+                  {loading ? (
+                    <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                  ) : (
+                    <>Create Account <span className="text-base">→</span></>
+                  )}
+                </button>
+
+                {/* Divider */}
+                <div className="relative text-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t" style={{ borderColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)' }} />
+                  </div>
+                  <span
+                    className="relative px-4 text-[9px] uppercase tracking-[0.3em]"
+                    style={{ color: '#9ca3af', background: isLight ? 'rgba(255,255,255,0.95)' : '#1e1e1e' }}
+                  >
+                    Or continue with
+                  </span>
+                </div>
+
+                {/* Google button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const base = axiosInstance?.defaults?.baseURL || "";
+                    window.location.href = `${base}/auth/oauth/start?provider=google`;
+                  }}
+                  className="w-full h-12 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] text-sm font-semibold text-white transition-colors flex items-center justify-center gap-3"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                  Continue with Google
+                </button>
+              </form>
+            </div>
+
+            {/* Footer */}
+            <p className="mt-6 text-center text-xs" style={{ color: isLight ? '#6b7280' : '#9ca3af' }}>
+              Already have an account?{" "}
+              <Link
+                to="/login"
+                className="inline-block font-bold underline decoration-from-font transition-colors cursor-pointer"
+                style={{ color: isLight ? '#000000' : '#F0D880', pointerEvents: 'auto' }}
+                aria-label="Go to login page"
+              >
+                Sign in
+              </Link>
             </p>
           </div>
-
-          <div className="relative">
-            <label htmlFor="confirmPassword" className="sr-only">Confirm Password</label>
-            <input
-              id="confirmPassword"
-              type={showConfirm ? "text" : "password"}
-              name="confirmPassword"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              onKeyUp={(e) =>
-                setCapsConfirm(e.getModifierState && e.getModifierState("CapsLock"))
-              }
-              required
-              autoComplete="new-password"
-              aria-invalid={!isConfirmMatch}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none ${
-                isConfirmMatch ? "focus:ring-indigo-400" : "focus:ring-red-400"
-              }`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirm((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-indigo-600"
-            >
-              {showConfirm ? "Hide" : "Show"}
-            </button>
-            {capsConfirm && (
-              <div className="mt-1 text-xs text-amber-700">
-                Caps Lock is on
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-600">Preferred Language</label>
-            <select
-              value={preferredLanguage}
-              onChange={(e) => setPreferredLanguage(e.target.value)}
-              className="mt-1 w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none bg-white"
-            >
-              <option value="yo">Yorùbá</option>
-              <option value="en">English</option>
-              <option value="ha">Hausa</option>
-              <option value="ig">Igbo</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-600">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="mt-1 w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none bg-white"
-            >
-              <option value="learner">Learner</option>
-              <option value="educator">Educator</option>
-            </select>
-          </div>
-
-          <input
-            type="text"
-            placeholder="Referral code (optional)"
-            value={referral}
-            onChange={(e) => setReferral(e.target.value)}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none"
-          />
-
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={newsletter}
-              onChange={(e) => setNewsletter(e.target.checked)}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            Send me learning tips and product updates
-          </label>
-
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={accepted}
-              onChange={(e) => setAccepted(e.target.checked)}
-              required
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            I agree to the Terms and Privacy Policy
-          </label>
-
-          <button
-            type="submit"
-            disabled={isSubmitDisabled}
-            aria-busy={loading}
-            className={`w-full text-white py-3 rounded-lg transition duration-300 ${
-              isSubmitDisabled ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
-            }`}
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                </svg>
-                Creating account...
-              </span>
-            ) : (
-              "Register"
-            )}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-gray-600 text-sm">
-          Already have an account?{" "}
-          <Link to="/login" className="text-indigo-600 font-medium">
-            Login
-          </Link>
-        </p>
-      </Motion.div>
-      
-    </div>
-    <PublicFooter />
+        </Motion.div>
+      </div>
+      <PublicFooter />
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </>
   );
 };

@@ -2,18 +2,29 @@ import React from "react";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
 
+const CHARCOAL = "#1A1A1A";
+const GOLD = "#D4AF37";
+const GOLD_LIGHT = "#FFD700";
+
 const FooterPage = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
-      <div className="sticky top-0 z-40">
-        <PublicNavbar />
-      </div>
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-extrabold text-slate-900">Footer</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Explore the site links and legal information in the footer below.
+    <div className="relative min-h-screen w-full overflow-hidden text-white" style={{ background: CHARCOAL }}>
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: `radial-gradient(900px 500px at 50% 0%, rgba(212,175,55,0.10), transparent 65%)` }} />
+      <div className="pointer-events-none absolute inset-0 dot-grid" />
+      <div className="pointer-events-none absolute inset-0 noise-overlay" />
+
+      <PublicNavbar />
+
+      <main className="max-w-6xl mx-auto px-6 py-28 text-center">
+        <h1 className="text-3xl font-extrabold text-gold-gradient">
+          Site Links & Legal
+        </h1>
+        <p className="mt-3 text-sm text-white/70">
+          Explore the navigation links and legal information in the footer below.
         </p>
       </main>
+
       <PublicFooter />
     </div>
   );

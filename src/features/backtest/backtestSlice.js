@@ -7,9 +7,7 @@ import {
   getBacktestResultAPI,
 } from "./backtestAPI";
 
-/* =========================
-   Async Thunks
-========================= */
+/*  Async Thunks  */
 
 // Run Backtest
 export const runBacktest = createAsyncThunk(
@@ -53,9 +51,7 @@ export const fetchBacktestResult = createAsyncThunk(
   }
 );
 
-/* =========================
-   Initial State
-========================= */
+/*  Initial State */
 
 const initialState = {
   currentResult: null,
@@ -64,9 +60,7 @@ const initialState = {
   error: null,
 };
 
-/* =========================
-   Slice
-========================= */
+/* Slice */
 
 const backtestSlice = createSlice({
   name: "backtest",

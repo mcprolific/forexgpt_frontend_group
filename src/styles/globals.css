@@ -3,7 +3,69 @@ html, body, #root {
   height: 100%;
 }
 
+:root {
+  --fgpt-bg: #0a0f1a;
+  --fgpt-fg: #e5f4ff;
+  --fgpt-dot: rgba(255, 255, 255, 0.10);
+  --fgpt-dot-size: 18px;
+  --fgpt-mesh-emerald: radial-gradient(60rem 30rem at 8% 18%, rgba(212,175,55,0.14), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(255,215,0,0.10), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(52,211,153,0.08), transparent 64%);
+  --fgpt-mesh-violet:  radial-gradient(60rem 30rem at 8% 18%, rgba(168,85,247,0.14), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(244,114,182,0.10), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(139,92,246,0.08), transparent 64%);
+  --fgpt-mesh-sky:     radial-gradient(60rem 30rem at 8% 18%, rgba(14,165,233,0.14), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(34,211,238,0.10), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(56,189,248,0.08), transparent 64%);
+  /* Tiny SVG dot pattern as image layer so it's crisp on all screens */
+  --fgpt-star: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><circle cx='1' cy='1' r='1' fill='rgba(255,255,255,0.12)'/><circle cx='13' cy='13' r='1' fill='rgba(255,255,255,0.08)'/></svg>");
+}
+
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: var(--fgpt-bg);
+  color: var(--fgpt-fg);
+  background-image:
+    radial-gradient(1200px 600px at 20% 0%, rgba(16,185,129,0.10), transparent 60%),
+    var(--fgpt-star);
+  background-size:
+    auto,
+    var(--fgpt-dot-size) var(--fgpt-dot-size);
+  background-repeat: no-repeat, repeat;
+  background-attachment: fixed, fixed;
+}
+
+/* Global dot grid utility */
+.dot-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, var(--fgpt-dot) 1px, transparent 1.5px);
+  background-size: var(--fgpt-dot-size) var(--fgpt-dot-size);
+  opacity: 0.5;
+}
+
+/* Subtle noise overlay using cross gradients (GPU cheap) */
+.noise-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 2px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 2px);
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+/* Shine sweep used in hero */
+.shine {
+  background: linear-gradient(90deg, rgba(255,255,255,0.0), rgba(255,255,255,0.18), rgba(255,255,255,0.0));
+  filter: blur(10px);
+  animation: sweep 3.5s infinite ease-in-out;
+}
+
+@keyframes sweep {
+  0%   { transform: translateX(-40%) skewX(-8deg); opacity: 0.0; }
+  40%  { transform: translateX(0%)   skewX(-8deg); opacity: 0.4; }
+  80%  { transform: translateX(40%)  skewX(-8deg); opacity: 0.0; }
+  100% { transform: translateX(60%)  skewX(-8deg); opacity: 0.0; }
 }

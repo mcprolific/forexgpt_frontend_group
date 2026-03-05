@@ -20,6 +20,6 @@ export const getBacktestHistoryAPI = async () => {
  * Get single backtest result
  */
 export const getBacktestResultAPI = async (id) => {
-  const response = await axiosInstance.get(`/backtest/${id}`);
+  const response = await axiosInstance.get(`/backtest/results/${id}`);
   return response.data;
 };
