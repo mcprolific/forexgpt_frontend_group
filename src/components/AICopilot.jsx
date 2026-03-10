@@ -4,7 +4,7 @@ import { FaTimes, FaPaperPlane, FaUserCircle, FaMicrophone, FaStop, FaVolumeUp }
 import { useDispatch } from "react-redux";
 import { askMentor } from "../features/mentor/mentorSlice";
 import aiImage from "../assets/ai_assistant.png";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
 import Spinner from "./ui/Spinner";

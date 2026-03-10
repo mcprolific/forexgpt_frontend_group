@@ -2,7 +2,7 @@ import axios from "axios";
 
 const baseURL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
-  "http://127.0.0.1:8000/api/v1";
+  "http://127.0.0.1:8000";
 
 const axiosInstance = axios.create({
   baseURL,

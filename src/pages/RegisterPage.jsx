@@ -9,9 +9,10 @@ import PublicFooter from "../layout/PublicFooter";
 import Toast from "../components/ui/Toast";
 import useToast from "../hooks/useToast";
 import axiosInstance from "../services/axiosInstance";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 import Logo from "../assets/logo.png";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import LoadingScreen from "../components/ui/LoadingScreen";
 
 const RegisterPage = () => {
   const dispatch = useDispatch();
@@ -35,6 +36,7 @@ const RegisterPage = () => {
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const [confirmNotice, setConfirmNotice] = useState("");
+  const [resending, setResending] = useState(false);
   useEffect(() => {
     if (!cooldownUntil) return;
     const id = setInterval(() => {
@@ -179,6 +181,7 @@ const RegisterPage = () => {
         className="relative min-h-screen flex items-center justify-center overflow-hidden p-6 pt-24 pb-20 text-white selection:bg-[#D4AF37]/30 transition-colors duration-500"
         style={{ background: isLight ? "#F0EDE6" : "#1A1A1A" }}
       >
+        {loading && <LoadingScreen />}
         <div className="fixed top-0 left-0 right-0 z-50"><PublicNavbar /></div>
 
         {/* Premium Background Elements */}
@@ -311,10 +314,29 @@ const RegisterPage = () => {
                   className="mb-6 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 backdrop-blur px-5 py-4 text-center shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
                 >
                   <div className="text-sm md:text-base font-semibold" style={{ color: isLight ? '#7A6830' : '#F0D880' }}>
-                    Confirmation email sent to {confirmNotice}. Please check your mail to verify your account.
+                    Please check your email to Verify your ForexGPT account
                   </div>
+                  <button
+                    type="button"
+                    disabled={resending}
+                    onClick={async () => {
+                      try {
+                        setResending(true);
+                        await axiosInstance.post("/resend-confirmation", { email: confirmNotice });
+                        show("Confirmation email resent. Check inbox and spam.", "success");
+                      } catch {
+                        show("Could not resend confirmation email. Try again later.", "error");
+                      } finally {
+                        setResending(false);
+                      }
+                    }}
+                    className="inline-block mt-3 mr-2 px-4 py-2 rounded-lg font-bold text-xs tracking-widest transition-all duration-200"
+                    style={{ background: "linear-gradient(135deg, #1f2937, #111827)", color: "#F0D880", border: '1px solid rgba(240,216,128,0.3)' }}
+                  >
+                    {resending ? "Resending..." : "Resend Confirmation Email"}
+                  </button>
                   <Link
-                    to="/auth/confirmed"
+                    to="/confirmed"
                     className="inline-block mt-3 px-4 py-2 rounded-lg font-bold text-xs tracking-widest transition-all duration-200"
                     style={{ background: "linear-gradient(135deg, #FFD700, #D4AF37)", color: "#1A1A1A" }}
                   >
@@ -533,7 +555,7 @@ const RegisterPage = () => {
                   type="button"
                   onClick={() => {
                     const base = axiosInstance?.defaults?.baseURL || "";
-                    window.location.href = `${base}/auth/oauth/start?provider=google`;
+                    window.location.href = `${base}/oauth/start?provider=google`;
                   }}
                   className="w-full h-12 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] text-sm font-semibold text-white transition-colors flex items-center justify-center gap-3"
                 >

@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
-import axiosInstance from "../services/axiosInstance";
+import { useDispatch } from "react-redux";
+import { confirmEmail } from "../features/auth/authSlice";
 
 const EmailConfirmedPage = () => {
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const [status, setStatus] = useState({ loading: true, ok: false, message: "" });
@@ -14,25 +16,26 @@ const EmailConfirmedPage = () => {
     const params = new URLSearchParams(location.search);
     const token_hash = params.get("token_hash");
     const type = params.get("type");
+
     if (!token_hash || !type) {
-      setTimeout(() => setStatus({ loading: false, ok: false, message: "Missing confirmation parameters." }), 0);
+      setStatus({ loading: false, ok: false, message: "Missing confirmation parameters." });
       return;
     }
+
     (async () => {
       try {
-        const res = await axiosInstance.post("/auth/confirm", { token_hash, type });
-        const d = res.data || {};
-        if (d?.ok || d?.confirmed) {
-          setTimeout(() => setStatus({ loading: false, ok: true, message: "Your email has been confirmed successfully." }), 0);
-        } else {
-          setTimeout(() => setStatus({ loading: false, ok: true, message: "Email confirmed. You can now sign in." }), 0);
-        }
-      } catch (e) {
-        const msg = e?.response?.data?.detail || "Confirmation failed. The link may be invalid or expired.";
-        setTimeout(() => setStatus({ loading: false, ok: false, message: msg }), 0);
+        const res = await dispatch(confirmEmail({ token_hash, type })).unwrap();
+        setStatus({ loading: false, ok: true, message: "Your email has been confirmed. You can now log in to access your dashboard." });
+
+        // Auto-redirect to login after 3 seconds
+        setTimeout(() => {
+          navigate("/login");
+        }, 3000);
+      } catch (err) {
+        setStatus({ loading: false, ok: false, message: err || "Confirmation failed." });
       }
     })();
-  }, [location.search, navigate]);
+  }, [location.search, dispatch, navigate]);
 
   return (
     <div className="relative min-h-screen bg-[#1A1A1A] overflow-hidden text-white selection:bg-[#D4AF37]/30">

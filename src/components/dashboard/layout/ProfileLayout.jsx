@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { FiUser, FiX, FiMenu } from 'react-icons/fi';
-import { useAuth } from '../../../../contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const ProfileLayout = () => {
   const { user } = useAuth();

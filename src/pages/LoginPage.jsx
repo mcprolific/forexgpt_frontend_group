@@ -12,8 +12,9 @@ import Toast from "../components/ui/Toast";
 import useToast from "../hooks/useToast";
 import Modal from "../components/ui/Modal";
 import axiosInstance from "../services/axiosInstance";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 import Logo from "../assets/logo.png";
+import LoadingScreen from "../components/ui/LoadingScreen";
 
 const LoginPage = () => {
   const dispatch = useDispatch();
@@ -69,7 +70,7 @@ const LoginPage = () => {
         localStorage.removeItem("fgpt_login_email");
         localStorage.removeItem("fgpt_remember_me");
       }
-      navigate("/datadashboard");
+      navigate("/dashboard");
     } catch (err) {
       const msg = typeof err === "string" ? err : "";
       if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
@@ -112,7 +113,7 @@ const LoginPage = () => {
           setTimeout(() => {
             setOauthHandled(true);
             show("Logged in with OAuth", "success");
-            navigate("/datadashboard");
+            navigate("/dashboard");
           }, 0);
         }
       }
@@ -126,6 +127,7 @@ const LoginPage = () => {
       className="relative min-h-screen overflow-hidden text-white selection:bg-[#D4AF37]/30 transition-colors duration-500"
       style={{ background: isLight ? "#F0EDE6" : "#1A1A1A" }}
     >
+      {loading && <LoadingScreen />}
       {/* Premium Background Elements */}
       <Motion.div
         className="pointer-events-none absolute inset-0"
@@ -366,7 +368,7 @@ const LoginPage = () => {
               {formError && /verify|confirm|unverified/i.test(formError) && (
                 <div className="mt-3 text-[11px] text-amber-400 text-center">
                   Didn’t get the email? Check spam or request a new link from support. After confirming, return to
-                  <Link to="/auth/confirmed" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
+                  <Link to="/confirmed" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
                 </div>
               )}
 
@@ -388,7 +390,7 @@ const LoginPage = () => {
                 type="button"
                 onClick={() => {
                   const base = axiosInstance?.defaults?.baseURL || "";
-                  window.location.href = `${base}/auth/oauth/start?provider=google`;
+                  window.location.href = `${base}/oauth/start?provider=google`;
                 }}
                 className="w-full h-12 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] text-sm font-semibold text-white transition-colors flex items-center justify-center gap-3"
               >

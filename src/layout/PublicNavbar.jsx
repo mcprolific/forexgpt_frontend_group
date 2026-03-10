@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Bars3Icon, XMarkIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { motion as Motion } from "framer-motion";
 import Logo from "../assets/logo.png";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 
 const PublicNavbar = () => {
   const [open, setOpen] = useState(false);
@@ -273,10 +273,10 @@ const PublicNavbar = () => {
 
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] pt-3 pb-1" style={{ color: isLight ? "#9a7d30" : "#A89060" }}>Services</p>
                   <MobileLink to="/services" close={() => setOpen(false)}>Services Overview</MobileLink>
-                  <MobileLink to="/dashboard/strategy" close={() => setOpen(false)}>Code Generation</MobileLink>
-                  <MobileLink to="/dashboard/backtest" close={() => setOpen(false)}>Backtesting</MobileLink>
-                  <MobileLink to="/dashboard/transcript" close={() => setOpen(false)}>Signal Extraction</MobileLink>
-                  <MobileLink to="/dashboard/mentor" close={() => setOpen(false)}>Mentor AI</MobileLink>
+                  <MobileLink to="/strategy" close={() => setOpen(false)}>Code Generation</MobileLink>
+                  <MobileLink to="/backtest" close={() => setOpen(false)}>Backtesting</MobileLink>
+                  <MobileLink to="/transcript" close={() => setOpen(false)}>Signal Extraction</MobileLink>
+                  <MobileLink to="/mentor" close={() => setOpen(false)}>Mentor AI</MobileLink>
                   <MobileLink to="/how-ai-helps" close={() => setOpen(false)}>How AI Helps</MobileLink>
 
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] pt-3 pb-1" style={{ color: isLight ? "#9a7d30" : "#A89060" }}>Contact</p>

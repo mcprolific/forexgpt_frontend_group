@@ -1,183 +1,300 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
-  FiCode,
-  FiPlay,
-  FiRefreshCw,
-  FiEdit,
-  FiBookOpen,
-  FiSave,
-} from "react-icons/fi";
+  FiSend,
+  FiThumbsUp,
+  FiThumbsDown,
+  FiCopy,
+  FiDownload,
+  FiCpu,
+  FiClock,
+  FiZap,
+  FiCode
+} from 'react-icons/fi';
+import { motion as Motion } from 'framer-motion';
+import { useSelector } from 'react-redux';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { shadesOfPurple } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { getCodeConversationHistory, generateCode as askArchitect } from '../../../services/codeGenService';
+
+const GOLD = "#D4AF37";
+const GOLD_LIGHT = "#FFD700";
 
 const CodeGeneration = () => {
-  const [prompt, setPrompt] = useState("");
-  const [generatedCode, setGeneratedCode] = useState("");
-  const [explanation, setExplanation] = useState("");
-  const [sessionTitle, setSessionTitle] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { conversationId } = useParams();
+  const navigate = useNavigate();
+  const [newMessage, setNewMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef(null);
+  const { user } = useSelector((state) => state.auth);
 
-  const generateCode = () => {
-    setLoading(true);
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await getCodeConversationHistory(conversationId, user.id);
+        setMessages(res.history || []);
+      } catch (error) {
+        console.error("Error fetching logic history:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [conversationId, user?.id]);
 
-    setTimeout(() => {
-      const fakeCode = `// Example Moving Average Strategy
-//@version=5
-strategy("MA Crossover", overlay=true)
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
-fastMA = ta.sma(close, 9)
-slowMA = ta.sma(close, 21)
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || sending || !user?.id) return;
 
-if ta.crossover(fastMA, slowMA)
-    strategy.entry("Buy", strategy.long)
+    const userContent = newMessage;
+    setNewMessage('');
+    setSending(true);
 
-if ta.crossunder(fastMA, slowMA)
-    strategy.close("Buy")`;
+    // Optimistic update
+    const userMsg = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: userContent,
+      timestamp: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, userMsg]);
 
-      setGeneratedCode(fakeCode);
-      setExplanation("");
-      setLoading(false);
-    }, 1200);
+    try {
+      const response = await askArchitect(
+        userContent,
+        conversationId === 'new' ? null : conversationId,
+        user.id
+      );
+
+      if (response && response.conversation_id) {
+        // If it was a new conversation, the backend might only return the latest turn,
+        // or the whole history. Based on codegen_service.py:
+        // returns { code, explanation, conversation_id, code_id, language, timestamp }
+
+        const assistantMsg = {
+          id: response.code_id || (Date.now().toString() + "-assistant"),
+          role: 'assistant',
+          content: response.explanation,
+          code: response.code, // Custom property for rendering code block
+          timestamp: response.timestamp || new Date().toISOString()
+        };
+
+        if (conversationId === 'new') {
+          navigate(`/dashboard/codegen/session/${response.conversation_id}`, { replace: true });
+        } else {
+          setMessages(prev => [...prev, assistantMsg]);
+        }
+      }
+    } catch (error) {
+      console.error("Error generating logic:", error);
+      setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+    } finally {
+      setSending(false);
+    }
   };
 
-  const debugCode = () => {
-    setExplanation(
-      "No syntax errors detected. Consider adding risk management (Stop Loss / Take Profit) for better performance."
-    );
-  };
-
-  const explainCode = () => {
-    setExplanation(
-      "This strategy uses a 9-period moving average and 21-period moving average. When the fast MA crosses above the slow MA, it enters a buy trade. When it crosses below, it closes the trade."
-    );
-  };
-
-  const modifyCode = () => {
-    setGeneratedCode((prev) =>
-      prev + "\n\n// Added Risk Management\nstrategy.exit('TP/SL', profit=50, loss=25)"
-    );
-  };
-
-  const saveSession = () => {
-    alert("Session saved successfully!");
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-black text-white p-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-yellow-500">
-            Code Generation
-          </h1>
-          <p className="text-sm text-white mt-1">
-            Generate, debug, and optimize trading strategies
-          </p>
+  const renderContent = (content, code) => {
+    return (
+      <div className="space-y-4">
+        {/* Explanation with Markdown support */}
+        <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+          <ReactMarkdown
+            components={{
+              code({ node, inline, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || '');
+                return !inline && match ? (
+                  <div className="rounded-lg overflow-hidden my-4 border border-white/10">
+                    <SyntaxHighlighter
+                      style={atomDark}
+                      language={match[1]}
+                      PreTag="div"
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  </div>
+                ) : (
+                  <code className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-500 font-mono text-xs" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+            }}
+          >
+            {content}
+          </ReactMarkdown>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <input
-            type="text"
-            value={sessionTitle}
-            onChange={(e) => setSessionTitle(e.target.value)}
-            placeholder="Session title..."
-            className="px-3 py-2 bg-black border border-gray-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-yellow-600 w-64"
-          />
-
-          <button
-            onClick={saveSession}
-            className="flex items-center space-x-2 px-4 py-2 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition"
-          >
-            <FiSave />
-            <span>Save</span>
-          </button>
-        </div>
-      </div>
-
-      {/* INPUT SECTION */}
-      <div className="bg-black border border-gray-800 rounded-lg p-5 mb-6">
-        <h2 className="text-lg font-semibold text-yellow-500 mb-3">
-          Strategy Prompt
-        </h2>
-
-        <textarea
-          rows="4"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe your trading strategy..."
-          className="w-full px-4 py-3 bg-black border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-yellow-600 text-sm"
-        />
-
-        <button
-          onClick={generateCode}
-          disabled={loading}
-          className="mt-4 w-full px-4 py-3 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition flex items-center justify-center space-x-2"
-        >
-          {loading ? (
-            <>
-              <FiRefreshCw className="animate-spin" />
-              <span>Generating...</span>
-            </>
-          ) : (
-            <>
-              <FiPlay />
-              <span>Generate Code</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* ACTION BUTTONS */}
-      {generatedCode && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <button
-            onClick={debugCode}
-            className="px-4 py-3 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition"
-          >
-            Debug Code
-          </button>
-
-          <button
-            onClick={modifyCode}
-            className="px-4 py-3 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition"
-          >
-            Modify Code
-          </button>
-
-          <button
-            onClick={explainCode}
-            className="px-4 py-3 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition"
-          >
-            Explain Code
-          </button>
-        </div>
-      )}
-
-      {/* OUTPUT SECTION */}
-      {generatedCode && (
-        <div className="bg-black border border-gray-800 rounded-lg overflow-hidden mb-6">
-          <div className="bg-black border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-yellow-500">
-              <FiCode />
-              <span className="text-sm font-medium">
-                Generated Code
-              </span>
+        {/* Primary Code Block (Neural Script) */}
+        {code && (
+          <div className="rounded-xl overflow-hidden bg-[#0d0d0d] border border-white/10 group shadow-2xl">
+            <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                <span className="text-[10px] font-black text-gray-400 upper-case tracking-widest flex items-center gap-2">
+                  <FiCode size={12} className="text-yellow-500" /> Neural Strategy Executable
+                </span>
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(code);
+                    toast.success("Script copied to clipboard");
+                  }}
+                  className="p-1.5 hover:text-yellow-500 transition-colors text-gray-500 flex items-center gap-1.5"
+                >
+                  <FiCopy size={12} />
+                  <span className="text-[8px] font-black uppercase tracking-tighter">Copy Logic</span>
+                </button>
+              </div>
+            </div>
+            <div className="relative group/code">
+              <SyntaxHighlighter
+                language="javascript" // Default for ForexGPT logic, can be dynamic if needed
+                style={atomDark}
+                customStyle={{
+                  margin: 0,
+                  padding: '1.5rem',
+                  fontSize: '0.8rem',
+                  backgroundColor: 'transparent',
+                  fontFamily: 'JetBrains Mono, Menlo, monospace'
+                }}
+                showLineNumbers={true}
+                lineNumberStyle={{ color: '#ffffff20', minWidth: '2.5em' }}
+              >
+                {code}
+              </SyntaxHighlighter>
             </div>
           </div>
+        )}
+      </div>
+    );
+  };
 
-          <pre className="p-5 text-sm text-green-400 overflow-x-auto">
-            <code>{generatedCode}</code>
-          </pre>
-        </div>
-      )}
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="h-12 w-12 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-      {/* EXPLANATION */}
-      {explanation && (
-        <div className="bg-black border border-gray-800 rounded-lg p-5">
-          <h3 className="text-lg font-semibold text-yellow-500 mb-2">
-            Explanation / Debug Info
-          </h3>
-          <p className="text-white text-sm">{explanation}</p>
+  return (
+    <div className="flex flex-col h-[calc(100vh-140px)] bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
+
+      {/* Header */}
+      <div className="bg-white/[0.02] border-b border-white/5 p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
+              <FiCpu className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">Logic Intelligence</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">AI Node Active • {messages.length} Exchanges</span>
+              </div>
+            </div>
+          </div>
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-yellow-500 hover:border-yellow-500/30 transition-all">
+            <FiDownload /> Export Logic
+          </button>
         </div>
-      )}
+      </div>
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center opacity-20">
+            <FiCode size={48} className="text-yellow-500 mb-4" />
+            <p className="font-black uppercase tracking-[0.3em] text-xs">Awaiting Logic Query</p>
+          </div>
+        ) : (
+          messages.map((message, idx) => (
+            <Motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={message.id || idx}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`max-w-[85%] rounded-2xl p-4 transition-all
+                ${message.role === 'user'
+                  ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10'
+                  : 'bg-white/[0.03] border border-white/5 text-gray-200'}
+              `}>
+                {message.role === 'assistant' && (
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                    <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">AI LOGIC</span>
+                  </div>
+                )}
+
+                {renderContent(message.content, message.code)}
+
+                <div className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
+                  ${message.role === 'user' ? 'text-black/40' : 'text-gray-600'}
+                `}>
+                  <span>{message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                  {message.role === 'assistant' && (
+                    <div className="flex items-center gap-2">
+                      <button className="hover:text-yellow-500"><FiThumbsUp /></button>
+                      <button className="hover:text-yellow-500"><FiThumbsDown /></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Motion.div>
+          ))
+        )}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex gap-2">
+              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce" />
+              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="p-6 bg-white/[0.02] border-t border-white/5">
+        <div className="relative group">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            disabled={sending}
+            placeholder="Input neural logic query..."
+            className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
+            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim() || sending}
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
+          >
+            <FiSend size={18} />
+          </button>
+        </div>
+        <div className="mt-3 flex items-center justify-center gap-6">
+          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
+            <FiZap className="text-yellow-500" /> High-Compute Node
+          </span>
+          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
+            <FiClock className="text-yellow-500" /> Neural Knowledge
+          </span>
+        </div>
+      </div>
     </div>
   );
 };

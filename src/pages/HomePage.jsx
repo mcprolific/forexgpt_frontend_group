@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import CountUp from "react-countup";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 import {
   BoltIcon,
   CpuChipIcon,
@@ -25,6 +25,7 @@ import Button from "../components/ui/Button";
 import Spinner from "../components/ui/Spinner";
 import Toast from "../components/ui/Toast";
 import useToast from "../hooks/useToast";
+import LoadingScreen from "../components/ui/LoadingScreen";
 
 /* ── Design tokens ─────────────────────────────────────── */
 const GOLD = "#D4AF37";
@@ -172,6 +173,8 @@ const HomePage = () => {
       className="relative min-h-screen w-full overflow-hidden"
       style={{ background: BG, color: TEXT }}
     >
+      {isLoading && <LoadingScreen />}
+
       {/* ── Background layers ── */}
       {/* Fade-in curtain */}
       <Motion.div
@@ -188,7 +191,7 @@ const HomePage = () => {
       >
         <video
           autoPlay muted loop playsInline
-          className="absolute min-w-full min-h-full w-auto h-auto top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 object-cover contrast-[1.2] saturate-[1.2] brightness-[0.9]"
+          className="absolute min-w-full min-h-full w-auto h-auto top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 object-cover contrast-[1.5] saturate-[1.2] brightness-[0.9]"
         >
           <source src="/src/assets/hero-bg.mp4" type="video/mp4" />
         </video>
@@ -199,12 +202,14 @@ const HomePage = () => {
       </Motion.div>
 
       {/* Light mode hero gradient */}
-      {isLight && (
-        <div
-          className="pointer-events-none fixed inset-0 z-0"
-          style={{ background: "radial-gradient(900px 500px at 50% -10%, rgba(212,175,55,0.12), transparent 70%)" }}
-        />
-      )}
+      {
+        isLight && (
+          <div
+            className="pointer-events-none fixed inset-0 z-0"
+            style={{ background: "radial-gradient(900px 500px at 50% -10%, rgba(212,175,55,0.12), transparent 70%)" }}
+          />
+        )
+      }
 
       {/* Gold radial glows */}
       <div
@@ -805,7 +810,7 @@ const HomePage = () => {
       {toast && <Toast message={toast.message} type={toast.type} />}
 
       <PublicFooter />
-    </div>
+    </div >
   );
 };
 

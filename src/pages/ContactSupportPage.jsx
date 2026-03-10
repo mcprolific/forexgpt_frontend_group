@@ -6,7 +6,7 @@ import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import Toast from "../components/ui/Toast";
 import useToast from "../hooks/useToast";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 import {
   EnvelopeIcon,
   ChatBubbleLeftRightIcon,

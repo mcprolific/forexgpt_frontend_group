@@ -4,7 +4,7 @@ import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
 import avatarDev from "../assets/mcp.jpg";
 import avatarEng from "../assets/NCC_logo.png";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -39,7 +39,7 @@ const TeamNamesPage = () => {
           portfolio: "https://idris-saka.vercel.app/",
           linkedin: "https://www.linkedin.com/in/saka-idris-906a0b256/",
           image: avatarDev,
-          bio: "Leads UI architecture: React/Vite, design systems, and performance-focused UX."
+          bio: "Leads UI architecture: React/Vite, design systems, and performance-focused UX"
         },
         {
           name: "Odushile Omodolapo Odunayo",
@@ -47,7 +47,7 @@ const TeamNamesPage = () => {
           portfolio: "https://www.linkedin.com/in/omodolapo-odushile-8a9494383",
           linkedin: "https://www.linkedin.com/in/omodolapo-odushile-8a9494383",
           image: avatarEng,
-          bio: "Backend Lead — FastAPI services, authentication, and robust API design."
+          bio: "Backend Lead: FastAPI services, authentication, and robust API design"
         },
         {
           name: "Sanni Abolore",
@@ -55,7 +55,7 @@ const TeamNamesPage = () => {
           portfolio: "#",
           linkedin: "https://github.com/O-R-E001-dotcom",
           image: avatarEng,
-          bio: "Database lead — schema design, Supabase, migrations, and performance tuning."
+          bio: "Database lead — Handled database schema, authentication, integration and error handling."
         },
 
         {
@@ -64,7 +64,7 @@ const TeamNamesPage = () => {
           portfolio: "#",
           linkedin: "#",
           image: avatarEng,
-          bio: "Dashboard UI — charts, tables, and responsive component implementation."
+          bio: "Dashboard UI: charts, tables, and responsive component implementation"
         },
       ],
     },
@@ -78,7 +78,7 @@ const TeamNamesPage = () => {
           portfolio: "https://github.com/RasakOlasunkanmi",
           linkedin: "#",
           image: avatarEng,
-          bio: "Backtesting engine and model fine‑tuning; leads technical direction."
+          bio: "Backtesting engine and model fine‑tuning; leads technical direction"
         },
         {
           name: "Victor Ridwan Ademuyiwa",
@@ -86,23 +86,23 @@ const TeamNamesPage = () => {
           portfolio: "#",
           linkedin: "#",
           image: avatarEng,
-          bio: "Codegen, signals, mentor services & prompts; model fine‑tuning and integration."
+          bio: "Codegen, signals, mentor services & prompts; model fine‑tuning and integration"
         },
         {
-          name: "Olaiya Solomon",
+          name: "Bello Oluwadamilare",
           role: "AI Engineer",
           portfolio: "#",
           linkedin: "#",
           image: avatarEng,
-          bio: "Model fine‑tuning and evaluation; metrics, test sets, and reporting."
+          bio: "Backend (Preprocessing, Labelling and Finetuning)"
         },
         {
-          name: "AI Quant Engineer 4",
+          name: "Olaiya Oluwaseun Solomon",
           role: "AI Engineer",
           portfolio: "#",
-          linkedin: "#",
+          linkedin: "https://www.linkedin.com/in/solomon-olaiya-028610356/",
           image: avatarEng,
-          bio: "Specializing in quantitative analysis and machine learning signal validation."
+          bio: "Fine‑tuning, model evaluation and reporting"
         },
       ],
     },

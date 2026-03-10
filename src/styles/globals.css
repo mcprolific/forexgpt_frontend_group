@@ -69,3 +69,37 @@ body {
   80%  { transform: translateX(40%)  skewX(-8deg); opacity: 0.0; }
   100% { transform: translateX(60%)  skewX(-8deg); opacity: 0.0; }
 }
+
+@media (max-width: 1024px) {
+  .dashboard-root nav {
+    left: 0 !important;
+  }
+  .dashboard-root main {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-root .dot-grid {
+    opacity: 0.15;
+  }
+  .dashboard-root nav {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .dashboard-root main {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .dashboard-root .hide-on-mobile {
+    display: none !important;
+  }
+  .dashboard-root .scroll-x {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dashboard-root .nowrap {
+    white-space: nowrap !important;
+  }
+}

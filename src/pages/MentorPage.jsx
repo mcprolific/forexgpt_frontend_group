@@ -2,7 +2,7 @@ import React from "react";
 import { motion as Motion } from "framer-motion";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../contexts/ThemeContext";
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";

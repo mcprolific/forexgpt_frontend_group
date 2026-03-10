@@ -1,73 +1,178 @@
-import React from "react";
-import { Link } from "react-router-dom";
-import { FiMessageCircle, FiPlus } from "react-icons/fi";
-import { mockMentorConversations } from "../../../data/mockData";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { getConversations, deleteConversation } from "../../../services/mentorService";
+import { FiMessageCircle, FiPlus, FiClock, FiChevronRight, FiTrash2 } from "react-icons/fi";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+import { useSelector } from "react-redux";
+import ConfirmModal from "../../../components/ui/ConfirmModal";
+import toast from "react-hot-toast";
+
+const GOLD = "#D4AF37";
+const GOLD_LIGHT = "#FFD700";
 
 const MentorConversations = () => {
-  return (
-    <div className="min-h-screen bg-black p-6">
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
+  const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
 
-      {/* Header */}
-      <div className="flex items-center justify-center mb-6 relative">
-        <h1 className="text-2xl font-bold text-yellow-500">
-          Mentor Conversations
-        </h1>
+  const handleNewConversation = () => {
+    navigate('/dashboard/mentor/messages/new');
+  };
+
+  const fetchConversations = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await getConversations(user.id);
+      setConversations(data);
+    } catch (error) {
+      console.error("Error fetching mentor conversations:", error);
+      toast.error("Failed to fetch conversations");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal.id || !user?.id) return;
+
+    const loadingToast = toast.loading("Deleting conversation...");
+    try {
+      await deleteConversation(deleteModal.id, user.id);
+      toast.success("Conversation deleted", { id: loadingToast });
+      fetchConversations();
+      setDeleteModal({ open: false, id: null });
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      toast.error("Failed to delete", { id: loadingToast });
+    }
+  };
+
+  const confirmDelete = (e, id) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteModal({ open: true, id });
+  };
+
+  useEffect(() => {
+    fetchConversations();
+  }, [user?.id]);
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+
+  const item = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0 }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="h-12 w-12 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
       </div>
+    );
+  }
 
-      {/* New Conversation Button */}
-      <div className="flex justify-center mb-6">
-        <button className="flex items-center space-x-2 px-4 py-2 bg-yellow-600 text-black rounded-lg hover:bg-white hover:text-black transition-all duration-200">
-          <FiPlus className="w-4 h-4" />
-          <span className="font-semibold">New Conversation</span>
+  return (
+    <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-white flex items-center gap-3">
+            <FiMessageCircle className="text-yellow-500" />
+            Mentor <span className="bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})` }}>Intelligence</span>
+          </h1>
+          <p className="text-gray-500 text-sm mt-1 uppercase tracking-widest font-bold">Past intellectual exchanges with your AI Trading Mentor.</p>
+        </div>
+
+        <button
+          onClick={handleNewConversation}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-yellow-500 text-black font-black text-xs hover:brightness-110 transition-all shadow-lg shadow-yellow-500/10"
+        >
+          <FiPlus size={16} /> New Chat
         </button>
       </div>
 
       {/* Conversation List */}
-      <div className="space-y-4">
-        {mockMentorConversations.length > 0 ? (
-          mockMentorConversations.map((conversation) => (
-            <Link
-              key={conversation.id}
-              to={`/mentor/conversations/${conversation.id}`}
-              className="block bg-black border border-gray-800 rounded-lg p-4 hover:bg-white hover:text-black transition-all duration-200 group"
-            >
-              <div className="flex items-center justify-between">
-
-                {/* Left Side */}
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center group-hover:bg-black transition-all duration-200">
-                    <FiMessageCircle className="w-5 h-5 text-black group-hover:text-yellow-500" />
-                  </div>
-
-                  <div>
-                    <h2 className="text-sm font-semibold text-yellow-500 group-hover:text-black truncate">
-                      {conversation.title}
-                    </h2>
-                    <p className="text-xs text-white group-hover:text-black truncate">
-                      {conversation.last_message}
-                    </p>
-                  </div>
+      <Motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="space-y-4"
+      >
+        {conversations.length > 0 ? (
+          conversations.map((conversation) => (
+            <Motion.div key={conversation.conversation_id} variants={item}>
+              <Link
+                to={`/dashboard/mentor/messages/${conversation.conversation_id}`}
+                className="group p-5 rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-yellow-500/20 transition-all flex items-center gap-5 relative overflow-hidden"
+              >
+                <div className="h-12 w-12 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-black transition-all">
+                  <FiMessageCircle className="w-6 h-6" />
                 </div>
 
-                {/* Right Side */}
-                <div className="text-right">
-                  <p className="text-xs text-white group-hover:text-black">
-                    {conversation.updated_at}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-4">
+                    <h4 className="font-bold text-gray-200 group-hover:text-yellow-500 transition-colors truncate">
+                      {conversation.preview.length > 30 ? conversation.preview.substring(0, 30) + "..." : conversation.preview || 'AI Conversation'}
+                    </h4>
+                    <span className="text-[10px] text-gray-600 whitespace-nowrap font-black uppercase tracking-tighter flex items-center gap-1">
+                      <FiClock size={10} />
+                      {new Date(conversation.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 truncate max-w-xl">
+                    {conversation.preview || 'Continue your analysis with AI-powered insights.'}
                   </p>
                 </div>
 
-              </div>
-            </Link>
+                <div className="flex items-center gap-3">
+                  <FiChevronRight className="w-5 h-5 text-gray-600 group-hover:text-yellow-500 transition-colors" />
+                  <button
+                    onClick={(e) => confirmDelete(e, conversation.conversation_id)}
+                    className="p-2 rounded-lg bg-red-500/10 text-red-500/50 hover:bg-red-500 hover:text-white transition-all z-20"
+                    title="Delete Conversation"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Background Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+            </Motion.div>
           ))
         ) : (
-          <div className="text-center py-20">
-            <FiMessageCircle className="w-10 h-10 text-yellow-500 mx-auto mb-4" />
-            <p className="text-white text-sm">
-              No conversations yet.
-            </p>
+          <div className="text-center py-20 opacity-40">
+            <div className="h-16 w-16 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
+              <FiMessageCircle className="w-8 h-8 text-yellow-500" />
+            </div>
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No archive entries found</p>
+            <p className="text-[10px] text-gray-600 mt-2 uppercase tracking-[0.2em]">Start a new conversation to build your knowledge base.</p>
           </div>
         )}
-      </div>
+      </Motion.div>
+
+      <AnimatePresence>
+        {deleteModal.open && (
+          <ConfirmModal
+            open={deleteModal.open}
+            onClose={() => setDeleteModal({ open: false, id: null })}
+            onConfirm={handleDelete}
+            title="Delete Conversation"
+            message="Are you sure you want to delete this intellectual exchange? This action cannot be undone."
+            confirmText="Delete Permanently"
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

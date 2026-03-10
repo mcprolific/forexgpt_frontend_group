@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { loginAPI, registerAPI } from "./authAPI";
+import { loginAPI, registerAPI, confirmEmailAPI } from "./authAPI";
 
 const storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
 const storedUser = typeof localStorage !== "undefined" ? (() => {
@@ -41,6 +41,19 @@ export const registerUser = createAsyncThunk(
     }
   }
 );
+
+export const confirmEmail = createAsyncThunk(
+  "auth/confirm",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const data = await confirmEmailAPI(payload);
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.detail || "Confirmation failed");
+    }
+  }
+);
+
 
 const authSlice = createSlice({
   name: "auth",
@@ -99,7 +112,34 @@ const authSlice = createSlice({
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(confirmEmail.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(confirmEmail.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+        const token = action.payload?.tokens?.access_token || null;
+        const user = action.payload?.user || null;
+        if (token && typeof localStorage !== "undefined") {
+          localStorage.setItem("token", token);
+        }
+        if (user && typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem("user", JSON.stringify(user));
+          } catch {
+            // ignore
+          }
+        }
+        state.token = token || state.token;
+        state.user = user || state.user;
+      })
+      .addCase(confirmEmail.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
+
   },
 });
 
