@@ -11,13 +11,17 @@ import axiosInstance from "./axiosInstance";
  */
 
 export const generateCode = async (message, conversationId = null, userId = null, previousCode = null, errorMessage = null) => {
-    const res = await axiosInstance.post("/codegen/generate", {
-        strategy_description: message,
-        conversation_id: conversationId,
-        user_id: userId,
-        previous_code: previousCode,
-        error_message: errorMessage
-    });
+    const res = await axiosInstance.post(
+        "/codegen/generate",
+        {
+            strategy_description: message,
+            conversation_id: conversationId,
+            user_id: userId,
+            previous_code: previousCode,
+            error_message: errorMessage
+        },
+        { timeout: 30000 }
+    );
     return res.data;
 };
 

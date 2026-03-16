@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   FiSend,
   FiThumbsUp,
@@ -25,20 +25,73 @@ const GOLD_LIGHT = "#FFD700";
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
+  const getErrorMessage = (error, fallback) => {
+    if (error?.code === "ECONNABORTED" || error?.message?.toLowerCase().includes("timeout")) {
+      return "Request timed out. Please try again.";
+    }
+    if (error?.response?.status === 403) return "Not authorized to access this conversation.";
+    if (error?.response?.data?.message) return error.response.data.message;
+    if (error?.message) return error.message;
+    return fallback;
+  };
+
+  useEffect(() => {
+    if (conversationId === 'new' && location.state?.prefilledDescription) {
+      setNewMessage(location.state.prefilledDescription);
+    }
+  }, [conversationId, location.state]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const key = `codegen_draft_${conversationId}`;
+    const saved = sessionStorage.getItem(key);
+    if (saved && !newMessage) setNewMessage(saved);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const key = `codegen_draft_${conversationId}`;
+    if (newMessage) {
+      sessionStorage.setItem(key, newMessage);
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  }, [conversationId, newMessage]);
+
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+      if (!conversationId || conversationId === 'new') {
+        setMessages([]);
+        setLoading(false);
+        return;
+      }
+      setErrorMessage('');
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
-        setMessages(res.history || []);
+        const history = Array.isArray(res?.history)
+          ? res.history
+          : Array.isArray(res?.messages)
+            ? res.messages
+            : Array.isArray(res)
+              ? res
+              : [];
+        setMessages(history);
       } catch (error) {
         console.error("Error fetching logic history:", error);
+        setErrorMessage(getErrorMessage(error, "Failed to load conversation history."));
       } finally {
         setLoading(false);
       }
@@ -58,6 +111,7 @@ const CodeGeneration = () => {
     const userContent = newMessage;
     setNewMessage('');
     setSending(true);
+    setErrorMessage('');
 
     // Optimistic update
     const userMsg = {
@@ -75,28 +129,39 @@ const CodeGeneration = () => {
         user.id
       );
 
-      if (response && response.conversation_id) {
-        // If it was a new conversation, the backend might only return the latest turn,
-        // or the whole history. Based on codegen_service.py:
-        // returns { code, explanation, conversation_id, code_id, language, timestamp }
+      if (!response?.conversation_id || (!response?.explanation && !response?.code)) {
+        throw new Error("No response returned from code generation.");
+      }
 
-        const assistantMsg = {
-          id: response.code_id || (Date.now().toString() + "-assistant"),
-          role: 'assistant',
-          content: response.explanation,
-          code: response.code, // Custom property for rendering code block
-          timestamp: response.timestamp || new Date().toISOString()
-        };
+      // If it was a new conversation, the backend might only return the latest turn,
+      // or the whole history. Based on codegen_service.py:
+      // returns { code, explanation, conversation_id, code_id, language, timestamp }
+      const assistantMsg = {
+        id: response.code_id || (Date.now().toString() + "-assistant"),
+        role: 'assistant',
+        content: response.explanation || "Code generated successfully.",
+        code: response.code,
+        timestamp: response.timestamp || new Date().toISOString()
+      };
 
-        if (conversationId === 'new') {
-          navigate(`/dashboard/codegen/session/${response.conversation_id}`, { replace: true });
-        } else {
-          setMessages(prev => [...prev, assistantMsg]);
-        }
+      setMessages(prev => [...prev, assistantMsg]);
+
+      if (conversationId === 'new') {
+        navigate(`/dashboard/codegen/session/${response.conversation_id}`, { replace: true });
       }
     } catch (error) {
       console.error("Error generating logic:", error);
-      setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+      const message = getErrorMessage(error, "Unable to generate strategy.");
+      setErrorMessage(message);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + "-assistant-error",
+          role: 'assistant',
+          content: `Error: ${message}`,
+          timestamp: new Date().toISOString()
+        }
+      ]);
     } finally {
       setSending(false);
     }
@@ -214,6 +279,11 @@ const CodeGeneration = () => {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        {errorMessage ? (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+            {errorMessage}
+          </div>
+        ) : null}
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <FiCode size={48} className="text-yellow-500 mb-4" />

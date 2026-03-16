@@ -162,7 +162,11 @@ const Signals = () => {
       setStats(statsData);
     } catch (err) {
       console.error('Fetch error:', err);
-      toast.error('Failed to load signals');
+      if (err?.response?.status === 403) {
+        toast.error('Not authorized to access these signals');
+      } else {
+        toast.error('Failed to load signals');
+      }
     } finally {
       setLoading(false);
     }
@@ -194,7 +198,11 @@ const Signals = () => {
       setCompanyName('');
       await fetchAll();
     } catch (err) {
-      toast.error(`Extraction failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      if (err?.response?.status === 403) {
+        toast.error('Not authorized to extract signals', { id: t });
+      } else {
+        toast.error(`Extraction failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      }
     } finally {
       setExtracting(false);
     }
@@ -219,7 +227,11 @@ const Signals = () => {
       setBatchEntries([{ company_name: '', text: '' }]);
       await fetchAll();
     } catch (err) {
-      toast.error(`Batch failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      if (err?.response?.status === 403) {
+        toast.error('Not authorized to run batch extraction', { id: t });
+      } else {
+        toast.error(`Batch failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      }
     } finally {
       setExtracting(false);
     }
@@ -233,8 +245,12 @@ const Signals = () => {
       toast.success('Signal purged');
       setSignals(prev => prev.filter(s => s.signal_id !== signalId));
       if (selectedSignal?.signal_id === signalId) setSelectedSignal(null);
-    } catch {
-      toast.error('Failed to purge signal');
+    } catch (err) {
+      if (err?.response?.status === 403) {
+        toast.error('Not authorized to delete this signal');
+      } else {
+        toast.error('Failed to purge signal');
+      }
     }
   };
 
