@@ -55,12 +55,12 @@ const SignalResult = ({ signal, user }) => {
         <Motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="font-mono text-[12px] leading-relaxed text-gray-400 bg-[#050505] border border-white/5 rounded-3xl p-8 md:p-12 shadow-2xl relative overflow-hidden"
+            className="font-mono text-[12px] leading-relaxed text-gray-400 bg-[#050505] border border-white/5 rounded-3xl p-8 md:p-12 shadow-2xl relative overflow-hidden w-full max-w-[calc(100vw-1rem)] min-w-0 break-all sm:break-normal md:min-w-[600px]"
         >
             {/* Subtle scanline effect */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50 bg-[length:100%_2px,3px_100%]" />
 
-            <div className="relative z-10 whitespace-pre">
+            <div className="relative z-10 whitespace-normal">
                 <div className="text-white font-black tracking-[0.2em] uppercase mb-8">
                     {'                '}SIGNAL EXTRACTION RESULT
                 </div>
@@ -90,15 +90,15 @@ const SignalResult = ({ signal, user }) => {
                     <div className="mb-10 flex flex-wrap gap-3">
                         <button
                             onClick={handleLearnAboutSignal}
-                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition"
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
                         >
-                            Learn About This Signal
+                            📚 Learn About This Signal
                         </button>
                         <button
                             onClick={handleGenerateStrategy}
-                            className="px-4 py-2 rounded-lg bg-yellow-500 text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition"
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
                         >
-                            Generate Strategy Based On This
+                            💻 Generate Strategy Based On This
                         </button>
                     </div>
                 )}

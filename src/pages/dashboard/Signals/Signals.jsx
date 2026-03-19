@@ -113,7 +113,7 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
     {/* Delete */}
     <button
       onClick={(e) => { e.stopPropagation(); onDelete(signal.signal_id); }}
-      className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white z-10"
+      className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white z-10 cursor-pointer"
     >
       <FiTrash2 size={13} />
     </button>
@@ -675,7 +675,7 @@ const Signals = () => {
               <div className="mt-4 px-1">
                 <button
                   onClick={() => handleDelete(selectedSignal.signal_id)}
-                  className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em]"
+                  className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em] cursor-pointer"
                 >
                   <FiTrash2 className="inline mr-2" size={13} />
                   Purge Intelligence
