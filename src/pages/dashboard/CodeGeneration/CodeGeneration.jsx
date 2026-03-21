@@ -9,76 +9,78 @@ import {
   FiCpu,
   FiClock,
   FiZap,
-  FiCode
+  FiCode,
+  FiPlay,
+  FiTool,
+  FiAlertCircle,
+  FiChevronDown,
+  FiChevronUp,
 } from 'react-icons/fi';
 import { motion as Motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { shadesOfPurple } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { getCodeConversationHistory, generateCode as askArchitect } from '../../../services/codeGenService';
-
-const GOLD = "#D4AF37";
-const GOLD_LIGHT = "#FFD700";
+import {
+  getCodeConversationHistory,
+  generateCode as askArchitect,
+} from '../../../services/codeGenService';
 
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+
+  // ── Improvement mode state ─────────────────────────────────
+  const [improvementMode, setImprovementMode] = useState(false);
+  const [originalCode, setOriginalCode] = useState(null);
+  const [backtestResults, setBacktestResults] = useState(null);
+  const [mentorAnalysis, setMentorAnalysis] = useState(null);
+  const [additionalRequirements, setAdditionalRequirements] = useState('');
+  const [showOriginalCode, setShowOriginalCode] = useState(false);
+  const [showBacktestSummary, setShowBacktestSummary] = useState(true);
+
+  // ── Latest generated code (for Test Strategy button) ──────
+  const [latestGeneratedCode, setLatestGeneratedCode] = useState(null);
+  const [latestStrategyDesc, setLatestStrategyDesc] = useState('');
+
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
-  const getErrorMessage = (error, fallback) => {
-    if (error?.code === "ECONNABORTED" || error?.message?.toLowerCase().includes("timeout")) {
-      return "Request timed out. Please try again.";
-    }
-    if (error?.response?.status === 403) return "Not authorized to access this conversation.";
-    if (error?.response?.data?.message) return error.response.data.message;
-    if (error?.message) return error.message;
-    return fallback;
-  };
-
+  // ── Handle incoming navigation state ──────────────────────
   useEffect(() => {
-    if (conversationId === 'new' && location.state?.prefilledDescription) {
-      setNewMessage(location.state.prefilledDescription);
+    const state = location.state || {};
+
+    // Coming from Mentor with pre-filled strategy context
+    if (state.fromMentor) {
+      const strategyType = state.strategyType || '';
+      const context = state.context || '';
+      setNewMessage(
+        `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
+      );
     }
-  }, [conversationId, location.state]);
 
-  useEffect(() => {
-    if (!conversationId) return;
-    const key = `codegen_draft_${conversationId}`;
-    const saved = sessionStorage.getItem(key);
-    if (saved && !newMessage) setNewMessage(saved);
-  }, [conversationId]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-    const key = `codegen_draft_${conversationId}`;
-    if (newMessage) {
-      sessionStorage.setItem(key, newMessage);
-    } else {
-      sessionStorage.removeItem(key);
+    // Coming from Mentor with improvement request
+    if (state.mode === 'improve') {
+      setImprovementMode(true);
+      setOriginalCode(state.originalCode || null);
+      setBacktestResults(state.backtestResults || null);
+      setMentorAnalysis(state.mentorAnalysis || null);
     }
-  }, [conversationId, newMessage]);
+  }, [location.state]);
 
+  // ── Fetch conversation history ─────────────────────────────
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!user?.id) {
+      if (conversationId === 'new') {
         setLoading(false);
         return;
       }
-      if (!conversationId || conversationId === 'new') {
-        setMessages([]);
-        setLoading(false);
-        return;
-      }
-      setErrorMessage('');
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
         const history = Array.isArray(res?.history)
@@ -90,8 +92,7 @@ const CodeGeneration = () => {
               : [];
         setMessages(history);
       } catch (error) {
-        console.error("Error fetching logic history:", error);
-        setErrorMessage(getErrorMessage(error, "Failed to load conversation history."));
+        console.error('Error fetching logic history:', error);
       } finally {
         setLoading(false);
       }
@@ -99,28 +100,29 @@ const CodeGeneration = () => {
     fetchHistory();
   }, [conversationId, user?.id]);
 
+  // ── Auto scroll ────────────────────────────────────────────
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
+  // ── Send message (initial generation) ─────────────────────
   const handleSendMessage = async () => {
     if (!newMessage.trim() || sending || !user?.id) return;
 
     const userContent = newMessage;
     setNewMessage('');
     setSending(true);
-    setErrorMessage('');
+    setLatestStrategyDesc(userContent);
 
-    // Optimistic update
     const userMsg = {
       id: Date.now().toString(),
       role: 'user',
       content: userContent,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
 
     try {
       const response = await askArchitect(
@@ -129,121 +131,190 @@ const CodeGeneration = () => {
         user.id
       );
 
-      if (!response?.conversation_id || (!response?.explanation && !response?.code)) {
-        throw new Error("No response returned from code generation.");
-      }
+      if (response && response.conversation_id) {
+        const assistantMsg = {
+          id: response.code_id || Date.now().toString() + '-assistant',
+          role: 'assistant',
+          content: response.explanation,
+          code: response.code,
+          timestamp: response.timestamp || new Date().toISOString(),
+        };
 
-      // If it was a new conversation, the backend might only return the latest turn,
-      // or the whole history. Based on codegen_service.py:
-      // returns { code, explanation, conversation_id, code_id, language, timestamp }
-      const assistantMsg = {
-        id: response.code_id || (Date.now().toString() + "-assistant"),
-        role: 'assistant',
-        content: response.explanation || "Code generated successfully.",
-        code: response.code,
-        timestamp: response.timestamp || new Date().toISOString()
-      };
+        setLatestGeneratedCode(response.code);
 
-      setMessages(prev => [...prev, assistantMsg]);
-
-      if (conversationId === 'new') {
-        navigate(`/dashboard/codegen/session/${response.conversation_id}`, { replace: true });
+        if (conversationId === 'new') {
+          navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
+            replace: true,
+          });
+        } else {
+          setMessages((prev) => [...prev, assistantMsg]);
+        }
       }
     } catch (error) {
-      console.error("Error generating logic:", error);
-      const message = getErrorMessage(error, "Unable to generate strategy.");
-      setErrorMessage(message);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now().toString() + "-assistant-error",
-          role: 'assistant',
-          content: `Error: ${message}`,
-          timestamp: new Date().toISOString()
-        }
-      ]);
+      console.error('Error generating logic:', error);
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
     } finally {
       setSending(false);
     }
   };
 
-  const renderContent = (content, code) => {
-    return (
-      <div className="space-y-4">
-        {/* Explanation with Markdown support */}
-        <div className="text-sm leading-relaxed prose prose-invert max-w-none">
-          <ReactMarkdown
-            components={{
-              code({ node, inline, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                return !inline && match ? (
-                  <div className="rounded-lg overflow-hidden my-4 border border-white/10">
-                    <SyntaxHighlighter
-                      style={atomDark}
-                      language={match[1]}
-                      PreTag="div"
-                      {...props}
-                    >
-                      {String(children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  </div>
-                ) : (
-                  <code className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-500 font-mono text-xs" {...props}>
-                    {children}
-                  </code>
-                );
-              }
-            }}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
+  // ── Improvement generation ─────────────────────────────────
+  const handleImproveStrategy = async () => {
+    if (sending || !user?.id || !originalCode) return;
 
-        {/* Primary Code Block (Neural Script) */}
-        {code && (
-          <div className="rounded-xl overflow-hidden bg-[#0d0d0d] border border-white/10 group shadow-2xl">
-            <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-                <span className="text-[10px] font-black text-gray-400 upper-case tracking-widest flex items-center gap-2">
-                  <FiCode size={12} className="text-yellow-500" /> Neural Strategy Executable
-                </span>
-              </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(code);
-                    toast.success("Script copied to clipboard");
-                  }}
-                  className="p-1.5 hover:text-yellow-500 transition-colors text-gray-500 flex items-center gap-1.5"
-                >
-                  <FiCopy size={12} />
-                  <span className="text-[8px] font-black uppercase tracking-tighter">Copy Logic</span>
-                </button>
-              </div>
-            </div>
-            <div className="relative group/code">
-              <SyntaxHighlighter
-                language="javascript" // Default for ForexGPT logic, can be dynamic if needed
-                style={atomDark}
-                customStyle={{
-                  margin: 0,
-                  padding: '1.5rem',
-                  fontSize: '0.8rem',
-                  backgroundColor: 'transparent',
-                  fontFamily: 'JetBrains Mono, Menlo, monospace'
-                }}
-                showLineNumbers={true}
-                lineNumberStyle={{ color: '#ffffff20', minWidth: '2.5em' }}
-              >
-                {code}
-              </SyntaxHighlighter>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    setSending(true);
+
+    const userMsg = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: `Improving strategy${additionalRequirements ? ` with additional requirements: ${additionalRequirements}` : ''}...`,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const { improveStrategy } = await import('../../../services/codeGenService');
+
+      const response = await improveStrategy(
+        user.id,
+        originalCode,
+        backtestResults || {},
+        mentorAnalysis || '',
+        additionalRequirements,
+        conversationId === 'new' ? null : conversationId
+      );
+
+      if (response) {
+        const assistantMsg = {
+          id: response.code_id || Date.now().toString() + '-improved',
+          role: 'assistant',
+          content: response.explanation,
+          code: response.code,
+          timestamp: response.timestamp || new Date().toISOString(),
+          isImproved: true,
+        };
+
+        setLatestGeneratedCode(response.code);
+        setImprovementMode(false);
+
+        if (conversationId === 'new' && response.conversation_id) {
+          navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
+            replace: true,
+          });
+        } else {
+          setMessages((prev) => [...prev, assistantMsg]);
+        }
+      }
+    } catch (error) {
+      console.error('Error improving strategy:', error);
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+    } finally {
+      setSending(false);
+    }
   };
+  // ── Navigate to Backtest with generated code ───────────────
+  const handleTestStrategy = (code, version = 1) => {
+    navigate('/backtest', {
+      state: {
+        mode: 'custom',
+        customCode: code,
+        strategyName: latestStrategyDesc.substring(0, 50) || 'Custom Strategy',
+        strategyType: 'custom',
+        version,
+      },
+    });
+  };
+
+  // ── Render message content ─────────────────────────────────
+  const renderContent = (content, code, isImproved = false) => (
+    <div className="space-y-4">
+      <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+        <ReactMarkdown
+          components={{
+            code({ node, inline, className, children, ...props }) {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline && match ? (
+                <div className="rounded-lg overflow-hidden my-4 border border-white/10">
+                  <SyntaxHighlighter
+                    style={atomDark}
+                    language={match[1]}
+                    PreTag="div"
+                    {...props}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                </div>
+              ) : (
+                <code
+                  className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-500 font-mono text-xs"
+                  {...props}
+                >
+                  {children}
+                </code>
+              );
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+
+      {/* Code block */}
+      {code && (
+        <div className="rounded-xl overflow-hidden bg-[#0d0d0d] border border-white/10 group shadow-2xl">
+          <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <FiCode size={12} className="text-yellow-500" />
+                {isImproved ? 'Improved Strategy v2' : 'Neural Strategy Executable'}
+              </span>
+            </div>
+            <button
+              onClick={() => navigator.clipboard.writeText(code)}
+              className="p-1.5 hover:text-yellow-500 transition-colors text-gray-500 flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
+            >
+              <FiCopy size={12} />
+              <span className="text-[8px] font-black uppercase tracking-tighter">Copy</span>
+            </button>
+          </div>
+          <SyntaxHighlighter
+            language="python"
+            style={atomDark}
+            customStyle={{
+              margin: 0,
+              padding: '1.5rem',
+              fontSize: '0.8rem',
+              backgroundColor: 'transparent',
+              fontFamily: 'JetBrains Mono, Menlo, monospace',
+            }}
+            showLineNumbers
+            lineNumberStyle={{ color: '#ffffff20', minWidth: '2.5em' }}
+          >
+            {code}
+          </SyntaxHighlighter>
+
+          {/* Test Strategy button */}
+          <div className="px-4 py-3 bg-white/5 border-t border-white/5 flex gap-2">
+            <button
+              onClick={() => handleTestStrategy(code, isImproved ? 2 : 1)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all"
+            >
+              <FiPlay size={12} />
+              {isImproved ? 'Test Improved Strategy' : 'Test Strategy'}
+            </button>
+            <button
+              onClick={() => navigator.clipboard.writeText(code)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
+            >
+              <FiDownload size={12} />
+              Copy Code
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) {
     return (
@@ -264,10 +335,16 @@ const CodeGeneration = () => {
               <FiCpu className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-sm font-black text-white uppercase tracking-widest">Logic Intelligence</h2>
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">
+                {improvementMode ? 'Strategy Improvement Mode' : 'Logic Intelligence'}
+              </h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">AI Node Active • {messages.length} Exchanges</span>
+                <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${improvementMode ? 'bg-orange-500' : 'bg-green-500'}`} />
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">
+                  {improvementMode
+                    ? 'Improvement Mode Active • Backtest Context Loaded'
+                    : `AI Node Active • ${messages.length} Exchanges`}
+                </span>
               </div>
             </div>
           </div>
@@ -277,14 +354,86 @@ const CodeGeneration = () => {
         </div>
       </div>
 
+      {/* Improvement Mode Banner */}
+      {improvementMode && (
+        <div className="mx-4 mt-4 rounded-xl border border-orange-500/30 bg-orange-500/10 overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FiTool className="text-orange-400" size={14} />
+              <span className="text-[11px] font-black text-orange-400 uppercase tracking-widest">
+                Improvement Mode — Backtest Context Loaded
+              </span>
+            </div>
+            <button
+              onClick={() => setShowBacktestSummary(!showBacktestSummary)}
+              className="text-orange-400 hover:text-orange-300"
+            >
+              {showBacktestSummary ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+            </button>
+          </div>
+
+          {showBacktestSummary && backtestResults && (
+            <div className="px-4 pb-3 border-t border-orange-500/20">
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-2 mb-1 font-bold">
+                Backtest Results
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Sharpe', value: backtestResults.sharpe_ratio ?? 'N/A' },
+                  { label: 'Max DD', value: backtestResults.max_drawdown != null ? `${backtestResults.max_drawdown}%` : 'N/A' },
+                  { label: 'Win Rate', value: backtestResults.win_rate != null ? `${backtestResults.win_rate}%` : 'N/A' },
+                  { label: 'Return', value: backtestResults.total_return != null ? `${backtestResults.total_return}%` : 'N/A' },
+                ].map((m) => (
+                  <div key={m.label} className="bg-black/30 rounded-lg p-2 text-center">
+                    <p className="text-[9px] text-gray-600 uppercase tracking-widest">{m.label}</p>
+                    <p className="text-sm font-black text-orange-400">{m.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {mentorAnalysis && (
+                <div className="mt-2 p-2 bg-black/30 rounded-lg">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">
+                    Mentor Analysis
+                  </p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-3">
+                    {mentorAnalysis}
+                  </p>
+                </div>
+              )}
+
+              {originalCode && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setShowOriginalCode(!showOriginalCode)}
+                    className="text-[10px] text-gray-500 hover:text-yellow-500 uppercase tracking-widest font-bold flex items-center gap-1"
+                  >
+                    {showOriginalCode ? <FiChevronUp size={10} /> : <FiChevronDown size={10} />}
+                    {showOriginalCode ? 'Hide Original Code' : 'Show Original Code'}
+                  </button>
+                  {showOriginalCode && (
+                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
+                      <SyntaxHighlighter
+                        language="python"
+                        style={atomDark}
+                        customStyle={{ margin: 0, padding: '1rem', fontSize: '0.75rem', backgroundColor: 'transparent' }}
+                        showLineNumbers
+                        lineNumberStyle={{ color: '#ffffff20' }}
+                      >
+                        {originalCode}
+                      </SyntaxHighlighter>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-        {errorMessage ? (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
-            {errorMessage}
-          </div>
-        ) : null}
-        {messages.length === 0 ? (
+        {messages.length === 0 && !improvementMode ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <FiCode size={48} className="text-yellow-500 mb-4" />
             <p className="font-black uppercase tracking-[0.3em] text-xs">Awaiting Logic Query</p>
@@ -297,23 +446,31 @@ const CodeGeneration = () => {
               key={message.id || idx}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[85%] rounded-2xl p-4 transition-all
-                ${message.role === 'user'
-                  ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10'
-                  : 'bg-white/[0.03] border border-white/5 text-gray-200'}
-              `}>
+              <div
+                className={`max-w-[85%] rounded-2xl p-4 transition-all
+                  ${message.role === 'user'
+                    ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10'
+                    : 'bg-white/[0.03] border border-white/5 text-gray-200'}`}
+              >
                 {message.role === 'assistant' && (
                   <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
-                    <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">AI LOGIC</span>
+                    <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
+                      {message.isImproved ? '🔧 IMPROVED STRATEGY' : 'AI LOGIC'}
+                    </span>
                   </div>
                 )}
 
-                {renderContent(message.content, message.code)}
+                {renderContent(message.content, message.code, message.isImproved)}
 
-                <div className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
-                  ${message.role === 'user' ? 'text-black/40' : 'text-gray-600'}
-                `}>
-                  <span>{message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                <div
+                  className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
+                    ${message.role === 'user' ? 'text-black/40' : 'text-gray-600'}`}
+                >
+                  <span>
+                    {message.timestamp
+                      ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : ''}
+                  </span>
                   {message.role === 'assistant' && (
                     <div className="flex items-center gap-2">
                       <button className="hover:text-yellow-500"><FiThumbsUp /></button>
@@ -325,6 +482,7 @@ const CodeGeneration = () => {
             </Motion.div>
           ))
         )}
+
         {sending && (
           <div className="flex justify-start">
             <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex gap-2">
@@ -336,27 +494,56 @@ const CodeGeneration = () => {
         )}
       </div>
 
-      {/* Input */}
-      <div className="p-6 bg-white/[0.02] border-t border-white/5">
-        <div className="relative group">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            disabled={sending}
-            placeholder="Input neural logic query..."
-            className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
-            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim() || sending}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
-          >
-            <FiSend size={18} />
-          </button>
-        </div>
-        <div className="mt-3 flex items-center justify-center gap-6">
+      {/* Input area */}
+      <div className="p-6 bg-white/[0.02] border-t border-white/5 space-y-3">
+
+        {/* Improvement mode — additional requirements */}
+        {improvementMode && (
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+              Additional Requirements (optional)
+            </label>
+            <textarea
+              value={additionalRequirements}
+              onChange={(e) => setAdditionalRequirements(e.target.value)}
+              placeholder="e.g. Add ADX filter, tighten stop losses to 1.5%, only trade during London session..."
+              rows={2}
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/30 transition-all font-medium placeholder-gray-600 resize-none"
+            />
+            <button
+              onClick={handleImproveStrategy}
+              disabled={sending || !originalCode}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-orange-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiTool size={14} />
+              {sending ? 'Generating Improved Strategy...' : 'Generate Improved Strategy'}
+            </button>
+          </div>
+        )}
+
+        {/* Standard input */}
+        {!improvementMode && (
+          <div className="relative group">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              disabled={sending}
+              placeholder="Input neural logic query..."
+              className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!newMessage.trim() || sending}
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
+            >
+              <FiSend size={18} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-6">
           <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
             <FiZap className="text-yellow-500" /> High-Compute Node
           </span>

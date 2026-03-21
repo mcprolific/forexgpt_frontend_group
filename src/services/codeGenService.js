@@ -54,3 +54,24 @@ export const updateGeneratedCode = async (codeId, userId, data) => {
     const res = await axiosInstance.patch(`/codegen/codes/${userId}/${codeId}`, data);
     return res.data;
 };
+
+
+
+export const improveStrategy = async (
+  userId,
+  originalCode,
+  backtestResults,
+  mentorAnalysis,
+  additionalRequirements = '',
+  conversationId = null
+) => {
+  const res = await axiosInstance.post('/codegen/improve', {
+    user_id: userId,
+    original_code: originalCode,
+    backtest_results: backtestResults,
+    mentor_analysis: mentorAnalysis,
+    additional_requirements: additionalRequirements,
+    conversation_id: conversationId,
+  });
+  return res.data;
+};
