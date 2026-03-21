@@ -5,6 +5,7 @@ import {
   FiMinus, FiAlertCircle, FiCheckCircle, FiList, FiGrid
 } from 'react-icons/fi';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   extractSignal,
@@ -123,6 +124,7 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const Signals = () => {
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
 
@@ -173,6 +175,23 @@ const Signals = () => {
   };
 
   useEffect(() => { fetchAll(); }, [userId]);
+
+  useEffect(() => {
+    const selectedId = selectedSignal?.signal_id || selectedSignal?.id;
+    if (selectedId) {
+      sessionStorage.setItem('signals_selected_id', String(selectedId));
+    } else {
+      sessionStorage.removeItem('signals_selected_id');
+    }
+  }, [selectedSignal]);
+
+  useEffect(() => {
+    if (selectedSignal || signals.length === 0) return;
+    const savedId = sessionStorage.getItem('signals_selected_id');
+    if (!savedId) return;
+    const found = signals.find((s) => String(s.signal_id || s.id) === String(savedId));
+    if (found) setSelectedSignal(found);
+  }, [signals, selectedSignal]);
 
   // ── Single Extraction ──────────────────────────────────────────────────────
   // POST /signals/extract
@@ -259,6 +278,32 @@ const Signals = () => {
   const addEntry = () => setBatchEntries(p => [...p, { company_name: '', text: '' }]);
   const removeEntry = (i) => setBatchEntries(p => p.filter((_, idx) => idx !== i));
 
+  const handleLearnAboutSignal = (signal) => {
+    if (!signal) return;
+    const reasoning = signal.reasoning || 'this signal was detected';
+    const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
+    navigate('/dashboard/mentor/messages/new', {
+      state: {
+        fromSignals: true,
+        prefilledQuestion: `Explain why ${reasoning}. How does this affect ${pair}?`
+      }
+    });
+  };
+
+  const handleGenerateStrategy = (signal) => {
+    if (!signal) return;
+    const confidence =
+      signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : 'a suitable threshold';
+    const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
+    const direction = (signal.direction || signal.primary_direction || 'NEUTRAL').toUpperCase();
+    navigate('/dashboard/codegen/session/new', {
+      state: {
+        fromSignals: true,
+        prefilledDescription: `Create a strategy that trades ${pair} ${direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidence}.`
+      }
+    });
+  };
+
   if (loading) return <LoadingScreen />;
 
   // Stats from SignalStatisticsResponse
@@ -269,8 +314,9 @@ const Signals = () => {
   const avgConf = Math.round((stats?.average_confidence || 0) * 100);
 
   // Filter uses direction from DB rows
+  const normalizeDirection = (value) => (value || '').toString().trim().toUpperCase();
   const filtered = signals.filter(s =>
-    filter === 'all' || s.direction === filter
+    filter === 'all' || normalizeDirection(s.direction || s.primary_direction) === filter
   );
 
   return (
@@ -673,6 +719,22 @@ const Signals = () => {
               <SignalResult signal={selectedSignal} user={user} />
 
               <div className="mt-4 px-1">
+                {selectedSignal.signal !== false && (
+                  <div className="mb-3 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleLearnAboutSignal(selectedSignal)}
+                      className="flex-1 min-w-[180px] px-4 py-3 rounded-2xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition"
+                    >
+                      Learn About This Signal
+                    </button>
+                    <button
+                      onClick={() => handleGenerateStrategy(selectedSignal)}
+                      className="flex-1 min-w-[180px] px-4 py-3 rounded-2xl bg-yellow-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition"
+                    >
+                      Generate Strategy Based On This
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={() => handleDelete(selectedSignal.signal_id)}
                   className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em] cursor-pointer"

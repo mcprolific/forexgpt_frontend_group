@@ -86,19 +86,19 @@ const SignalResult = ({ signal, user }) => {
                     {data.reasoning}
                 </div>
 
-                {signal.signal === true && (
+                {(signal?.signal === true || signal?.signal === 1 || signal?.signal === 'true') && (
                     <div className="mb-10 flex flex-wrap gap-3">
                         <button
                             onClick={handleLearnAboutSignal}
                             className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
                         >
-                            📚 Learn About This Signal
+                            Learn About This Signal
                         </button>
                         <button
                             onClick={handleGenerateStrategy}
                             className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
                         >
-                            💻 Generate Strategy Based On This
+                            Generate Strategy Based On This
                         </button>
                     </div>
                 )}
