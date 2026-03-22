@@ -26,6 +26,7 @@ import StrategyLabPage from './pages/StrategyLabPage';
 import BacktestPage from './pages/BacktestPage';
 import MentorPage from './pages/MentorPage';
 import EmailConfirmedPage from './pages/EmailConfirmedPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 
 // Dashboard Pages
 import Dashboard from './pages/dashboard/Dashboard';
@@ -89,6 +90,7 @@ function App() {
           <Route path="/strategy" element={<StrategyLabPage />} />
 
           <Route path="/mentor" element={<MentorPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* Dashboard Routes (Protected) */}
           <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
