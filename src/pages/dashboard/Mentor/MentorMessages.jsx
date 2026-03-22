@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   FiSend,
   FiThumbsUp,
@@ -13,6 +13,7 @@ import {
 import { motion as Motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getConversationHistory, askMentor } from '../../../services/mentorService';
@@ -24,24 +25,122 @@ const GOLD_LIGHT = "#FFD700";
 const MentorMessages = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
 
+  const formatMentorMessage = (content) => {
+    if (typeof content !== 'string') return content;
+    const sectionLabels = [
+      "SHORT ANSWER",
+      "LONG ANSWER",
+      "Mathematical Definition",
+      "Example calculation",
+      "Intuitive Explanation",
+      "Derivation",
+      "Assumptions",
+      "Real-World Application",
+      "Limitations",
+      "Practical Implementation",
+      "Common Misconceptions",
+      "Next Steps"
+    ];
+    const listSections = new Set([
+      "Assumptions",
+      "Limitations",
+      "Practical Implementation",
+      "Common Misconceptions",
+      "Next Steps"
+    ]);
+
+    const lines = content.replace(/\r\n/g, '\n').split('\n');
+    const out = [];
+    let activeListSection = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const labelMatch = sectionLabels.find((label) => line.toUpperCase().startsWith(label.toUpperCase() + ":"));
+      if (labelMatch) {
+        out.push('');
+        out.push(`**${labelMatch}:**`);
+        const rest = line.slice(labelMatch.length + 1).trim();
+        if (rest) {
+          out.push(rest);
+        }
+        activeListSection = listSections.has(labelMatch) ? labelMatch : null;
+        continue;
+      }
+
+      if (!line) {
+        out.push('');
+        activeListSection = null;
+        continue;
+      }
+
+      if (activeListSection) {
+        if (/^[-*]\s+/.test(line)) {
+          out.push(line);
+        } else {
+          out.push(`- ${line}`);
+        }
+      } else {
+        out.push(rawLine);
+      }
+    }
+
+    return out.join('\n');
+  };
+
+  const getErrorMessage = (error, fallback) => {
+    if (error?.response?.data?.message) return error.response.data.message;
+    if (error?.message) return error.message;
+    return fallback;
+  };
+
+  useEffect(() => {
+    if (conversationId === 'new' && location.state?.prefilledQuestion) {
+      setNewMessage(location.state.prefilledQuestion);
+    }
+  }, [conversationId, location.state]);
+
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+      if (!conversationId || conversationId === 'new') {
+        setMessages([]);
+        setLoading(false);
+        return;
+      }
+      setErrorMessage('');
       try {
         const res = await getConversationHistory(conversationId, user.id);
-        setMessages(res.history || []);
-      } catch (error) {
-        console.error("Error fetching history:", error);
-      } finally {
-        setLoading(false);
+        const history = Array.isArray(res?.history)
+          ? res.history
+          : Array.isArray(res?.messages)
+            ? res.messages
+            : Array.isArray(res)
+              ? res
+              : [];
+        setMessages(history);
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      if (error?.response?.status === 403) {
+        setErrorMessage("Not authorized to view this conversation.");
+      } else {
+        setErrorMessage(getErrorMessage(error, "Failed to load conversation history."));
       }
-    };
+    } finally {
+      setLoading(false);
+    }
+  };
     fetchHistory();
   }, [conversationId, user?.id]);
 
@@ -57,6 +156,7 @@ const MentorMessages = () => {
     const userContent = newMessage;
     setNewMessage('');
     setSending(true);
+    setErrorMessage('');
 
     // Optimistic update
     const userMsg = {
@@ -69,27 +169,37 @@ const MentorMessages = () => {
 
     try {
       const response = await askMentor(userContent, conversationId === 'new' ? null : conversationId, user.id);
-      if (response && response.conversation_id) {
-        const assistantMsg = {
-          id: Date.now().toString() + "-assistant",
-          role: 'assistant',
-          content: response.response,
-          timestamp: response.timestamp || new Date().toISOString()
-        };
+      if (!response?.response) {
+        throw new Error("Mentor returned no response.");
+      }
 
-        if (conversationId === 'new') {
-          // Store the assistant message so it can be shown after navigation if needed,
-          // but usually the useEffect will fetch it. 
-          // However, to be safe and responsive:
-          navigate(`/dashboard/mentor/messages/${response.conversation_id}`, { replace: true });
-        } else {
-          setMessages(prev => [...prev, assistantMsg]);
-        }
+      const assistantMsg = {
+        id: Date.now().toString() + "-assistant",
+        role: 'assistant',
+        content: response.response,
+        timestamp: response.timestamp || new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, assistantMsg]);
+
+      if (response?.conversation_id && conversationId === 'new') {
+        navigate(`/dashboard/mentor/messages/${response.conversation_id}`, { replace: true });
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      // Remove the optimistic user message on error
-      setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+      const message = error?.response?.status === 403
+        ? "Not authorized to send messages to this conversation."
+        : getErrorMessage(error, "Unable to reach mentor service.");
+      setErrorMessage(message);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + "-assistant-error",
+          role: 'assistant',
+          content: `Error: ${message}`,
+          timestamp: new Date().toISOString()
+        }
+      ]);
     } finally {
       setSending(false);
     }
@@ -129,6 +239,11 @@ const MentorMessages = () => {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        {errorMessage ? (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+            {errorMessage}
+          </div>
+        ) : null}
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <FiZap size={48} className="text-yellow-500 mb-4" />
@@ -155,6 +270,8 @@ const MentorMessages = () => {
 
                 <div className="text-sm leading-relaxed prose prose-invert max-w-none">
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    breaks
                     components={{
                       code({ node, inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || '');
@@ -194,7 +311,7 @@ const MentorMessages = () => {
                       }
                     }}
                   >
-                    {message.content}
+                    {formatMentorMessage(message.content)}
                   </ReactMarkdown>
                 </div>
 

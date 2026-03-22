@@ -83,7 +83,14 @@ const CodeGeneration = () => {
       }
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
-        setMessages(res.history || []);
+        const history = Array.isArray(res?.history)
+          ? res.history
+          : Array.isArray(res?.messages)
+            ? res.messages
+            : Array.isArray(res)
+              ? res
+              : [];
+        setMessages(history);
       } catch (error) {
         console.error('Error fetching logic history:', error);
       } finally {
