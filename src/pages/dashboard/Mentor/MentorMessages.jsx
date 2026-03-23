@@ -214,7 +214,7 @@ const MentorMessages = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
+    <div className="flex flex-col h-full bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
 
       {/* Header */}
       <div className="bg-white/[0.02] border-b border-white/5 p-5">

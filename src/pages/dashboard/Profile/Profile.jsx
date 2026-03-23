@@ -69,9 +69,9 @@ const Profile = () => {
 
   const handleCancel = () => {
     setEditedProfile({
-      display_name: profile.display_name,
-      experience_level: profile.experience_level,
-      preferred_pairs: profile.preferred_pairs || []
+      display_name: profile?.display_name ?? '',
+      experience_level: profile?.experience_level ?? 'Elite',
+      preferred_pairs: profile?.preferred_pairs || []
     });
     setIsEditing(false);
   };
