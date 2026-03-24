@@ -5,6 +5,7 @@ import PublicFooter from "../layout/PublicFooter";
 import { useTheme } from "../contexts/ThemeContext";
 import { useSelector } from "react-redux";
 import { runBacktest } from "../services/backtestService";
+import CandlestickChart from "../components/dashboard/backtest/CandlestickChart";
 import toast from "react-hot-toast";
 
 const GOLD = "#D4AF37";
@@ -258,6 +259,16 @@ const BacktestPage = () => {
                 <div className="opacity-50 text-gray-500 text-sm">No result yet</div>
               )}
             </div>
+            {result && result.equity_curve && result.equity_curve.length ? (
+              <div className="mt-4">
+                <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-500 mb-2">Equity Timeline</h4>
+                <div className="h-52">
+                  <CandlestickChart data={result.equity_curve} />
+                </div>
+              </div>
+            ) : result ? (
+              <p className="mt-4 text-xs text-gray-400">Equity data unavailable for charting.</p>
+            ) : null}
           </div>
         </div>
       </section>

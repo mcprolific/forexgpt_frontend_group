@@ -9,17 +9,48 @@ import axiosInstance from "./axiosInstance";
  * - GET    /codegen/codes/{user_id}
  * - GET    /codegen/codes/{user_id}/{code_id}
  * - GET    /codegen/conversations/{user_id}/{conversation_id}
+ * - DELETE /codegen/conversations/{user_id}/{conversation_id}
+ * - DELETE /codegen/codes/{user_id}/{code_id}
+ * - PATCH  /codegen/codes/{user_id}/{code_id}
  */
 
-export const generateCode = async (message, conversationId = null, userId = null, previousCode = null, errorMessage = null) => {
-    const res = await axiosInstance.post("/codegen/generate", {
-        strategy_description: message,
-        conversation_id: conversationId,
-        user_id: userId,
-        previous_code: previousCode,
-        error_message: errorMessage
-    });
-    return res.data;
+// FIX: Removed old dead-code CodeGenerationService class that hit non-existent
+// endpoints (/generate, /debug, /modify, /explain). Only named exports below are correct.
+
+export const generateCode = async (
+  message,
+  conversationId = null,
+  userId = null,
+  previousCode = null,
+  errorMessage = null
+) => {
+  const res = await axiosInstance.post("/codegen/generate", {
+    strategy_description: message,
+    conversation_id: conversationId,
+    user_id: userId,
+    previous_code: previousCode,
+    error_message: errorMessage,
+  });
+  return res.data;
+};
+
+export const improveStrategy = async (
+  userId,
+  originalCode,
+  backtestResults,
+  mentorAnalysis,
+  additionalRequirements = "",
+  conversationId = null
+) => {
+  const res = await axiosInstance.post("/codegen/improve", {
+    user_id: userId,
+    original_code: originalCode,
+    backtest_results: backtestResults,
+    mentor_analysis: mentorAnalysis,
+    additional_requirements: additionalRequirements,
+    conversation_id: conversationId,
+  });
+  return res.data;
 };
 
 export const getConversations = async (userId, limit = 20) => {

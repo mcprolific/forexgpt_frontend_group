@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { HomeIcon } from "@heroicons/react/24/outline";
 import { BoltIcon, ChatBubbleLeftRightIcon, CodeBracketIcon, ChartBarIcon, BookOpenIcon, ClockIcon, Cog6ToothIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
+import { useSelector } from "react-redux";
 
 const menuItems = [
   { name: "Dashboard", path: "/dashboard", icon: <HomeIcon className="h-5 w-5" /> },
@@ -17,6 +18,7 @@ const menuItems = [
 ];
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
+  const { user } = useSelector((state) => state.auth);
   return (
     <Motion.aside
       initial={{ x: -300 }}
@@ -46,6 +48,22 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             </NavLink>
           ))}
         </nav>
+
+        {/* User Info */}
+        {user && (
+          <div className="px-4 py-3 border-t border-gray-200">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user.name || user.email?.split('@')[0] || 'User'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Toggle button for mobile */}
         <button

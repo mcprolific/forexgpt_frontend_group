@@ -34,6 +34,7 @@ const LoginPage = () => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [capsPassword, setCapsPassword] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
   const validEmail = useMemo(
     () => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email),
@@ -41,6 +42,8 @@ const LoginPage = () => {
   );
 
   const handleLogin = async () => {
+    if (loading || isSubmittingLogin) return;
+    setIsSubmittingLogin(true);
     const e = { email: "", password: "" };
     setFormError("");
 
@@ -72,17 +75,14 @@ const LoginPage = () => {
       }
       navigate("/dashboard");
     } catch (err) {
-      const msg = typeof err === "string" ? err : "";
-      if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || (/email/i.test(msg) && /confirm/i.test(msg))) {
+      const msg = err?.message || err?.toString() || "";
+      if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
         setFormError("Email not verified. Please check your inbox and confirm your account before signing in.");
-      } else if (
-        /invalid|incorrect|wrong|bad credential|password|email.*not.*found|user.*not.*found|no.*user|not.*exist/i.test(msg) ||
-        !msg
-      ) {
-        setFormError("Invalid login details. Please check your email and password and try again.");
       } else {
-        setFormError(msg);
+        setFormError(msg || "Authentication failed. Please verify your secure credentials and try again.");
       }
+    } finally {
+      setIsSubmittingLogin(false);
     }
   };
 
@@ -393,11 +393,12 @@ const LoginPage = () => {
               {/* Google button */}
               <button
                 type="button"
+                disabled={loading || isSubmittingLogin}
                 onClick={() => {
                   const base = axiosInstance?.defaults?.baseURL || "";
                   window.location.href = `${base}/oauth/start?provider=google`;
                 }}
-                className="w-full h-12 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] text-sm font-semibold text-white transition-colors flex items-center justify-center gap-3"
+                className="w-full h-12 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] text-sm font-semibold text-white transition-colors flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
