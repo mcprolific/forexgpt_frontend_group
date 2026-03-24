@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -21,15 +22,36 @@ import toast from 'react-hot-toast';
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
+=======
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { FiSend } from "react-icons/fi";
+import { motion as Motion } from "framer-motion";
+import { useSelector } from "react-redux";
+import ReactMarkdown from "react-markdown";
+import {
+  getConversationHistory,
+  askMentor,
+  analyzeBacktest
+} from "../../../services/mentorService";
+import toast from "react-hot-toast";
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
 
 const MentorMessages = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+<<<<<<< HEAD
   const [newMessage, setNewMessage] = useState('');
+=======
+  const scrollRef = useRef(null);
+
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
   const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+<<<<<<< HEAD
   const [errorMessage, setErrorMessage] = useState('');
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
@@ -141,18 +163,72 @@ const MentorMessages = () => {
       setLoading(false);
     }
   };
+=======
+
+  const [analysisMode, setAnalysisMode] = useState(false);
+  const [backtestData, setBacktestData] = useState(null);
+
+  const { user } = useSelector((state) => state.auth);
+
+  // ==============================
+  // STRATEGY DETECTION
+  // ==============================
+  const detectStrategyKeywords = (text) => {
+    if (!text) return false;
+
+    const keywords = [
+      /mean\s*reversion/i,
+      /\brsi\b/i,
+      /\bmacd\b/i,
+      /bollinger\s*bands/i,
+      /moving\s*average/i,
+      /momentum/i,
+      /trend\s*following/i
+    ];
+
+    return keywords.some((regex) => regex.test(text));
+  };
+
+  // ==============================
+  // FETCH HISTORY
+  // ==============================
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!user?.id || conversationId === "new") {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await getConversationHistory(conversationId, user.id);
+        setMessages(res.history || []);
+      } catch (error) {
+        toast.error("Failed to load history");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
     fetchHistory();
   }, [conversationId, user?.id]);
 
+  // ==============================
+  // AUTO SCROLL
+  // ==============================
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending || !user?.id) return;
+  // ==============================
+  // ANALYSIS MODE
+  // ==============================
+  useEffect(() => {
+    if (location.state?.mode === "analyze" && !analysisMode) {
+      setAnalysisMode(true);
+      setBacktestData(location.state);
 
+<<<<<<< HEAD
     const userContent = newMessage;
     setNewMessage('');
     setSending(true);
@@ -166,8 +242,21 @@ const MentorMessages = () => {
       timestamp: new Date().toISOString()
     };
     setMessages(prev => [...prev, userMsg]);
+=======
+      analyzeBacktestResults(
+        location.state.strategyType,
+        location.state.results
+      );
+    }
+  }, [location.state, analysisMode]);
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
 
+  // ==============================
+  // ANALYZE BACKTEST
+  // ==============================
+  const analyzeBacktestResults = async (strategyType, results) => {
     try {
+<<<<<<< HEAD
       const response = await askMentor(userContent, conversationId === 'new' ? null : conversationId, user.id);
       if (!response?.response) {
         throw new Error("Mentor returned no response.");
@@ -200,20 +289,96 @@ const MentorMessages = () => {
           timestamp: new Date().toISOString()
         }
       ]);
+=======
+      setSending(true);
+
+      const data = await analyzeBacktest({
+        user_id: user.id,
+        strategy_type: strategyType,
+        results
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: `**${data.verdict}**\n\n${data.explanation}`,
+          timestamp: new Date().toISOString()
+        }
+      ]);
+    } catch (error) {
+      toast.error("Analysis failed");
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
     } finally {
       setSending(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="h-12 w-12 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
+  // ==============================
+  // SEND MESSAGE
+  // ==============================
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || sending) return;
+
+    const userMsg = {
+      id: Date.now().toString(),
+      role: "user",
+      content: newMessage
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setNewMessage("");
+    setSending(true);
+
+    try {
+      const res = await askMentor(
+        newMessage,
+        conversationId === "new" ? null : conversationId,
+        user.id
+      );
+
+      if (conversationId === "new") {
+        navigate(`/dashboard/mentor/messages/${res.conversation_id}`);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: res.response,
+          timestamp: res.timestamp
+        }
+      ]);
+    } catch (error) {
+      toast.error("Failed to send message");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ==============================
+  // IMPROVE STRATEGY
+  // ==============================
+  const handleImproveStrategy = () => {
+    if (!backtestData) return;
+
+    navigate("/codegen", {
+      state: {
+        mode: "improve",
+        originalCode: backtestData?.strategyCode || "",
+        backtestResults: backtestData?.results || {},
+        mentorAnalysis: messages[messages.length - 1]?.content || ""
+      }
+    });
+  };
+
+  if (loading) return <div>Loading...</div>;
 
   return (
+<<<<<<< HEAD
     <div className="flex flex-col h-full bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
 
       {/* Header */}
@@ -336,39 +501,60 @@ const MentorMessages = () => {
               <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce" />
               <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.2s]" />
               <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+=======
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+        {messages.map((msg, idx) => (
+          <Motion.div key={msg.id} className={msg.role === "user" ? "text-right" : ""}>
+            <div className="p-3 rounded-lg bg-gray-800 text-white">
+              <ReactMarkdown>{msg.content}</ReactMarkdown>
+>>>>>>> e00fa0c (Add mentor message, conversation, service, and axios instance)
             </div>
-          </div>
-        )}
+
+            {/* Generate Code */}
+            {msg.role === "assistant" && detectStrategyKeywords(msg.content) && (
+              <button
+                onClick={() =>
+                  navigate("/codegen", {
+                    state: {
+                      fromMentor: true,
+                      strategyText: msg.content
+                    }
+                  })
+                }
+                className="mt-2 px-3 py-1 bg-yellow-500 text-black rounded"
+              >
+                Generate Code
+              </button>
+            )}
+
+            {/* Improve Strategy */}
+            {msg.role === "assistant" &&
+              analysisMode &&
+              idx === messages.length - 1 && (
+                <button
+                  onClick={handleImproveStrategy}
+                  className="mt-2 px-3 py-1 bg-green-500 text-black rounded"
+                >
+                  Improve Strategy
+                </button>
+              )}
+          </Motion.div>
+        ))}
       </div>
 
       {/* Input */}
-      <div className="p-6 bg-white/[0.02] border-t border-white/5">
-        <div className="relative group">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            disabled={sending}
-            placeholder="Input market analysis query..."
-            className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
-            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim() || sending}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
-          >
-            <FiSend size={18} />
-          </button>
-        </div>
-        <div className="mt-3 flex items-center justify-center gap-6">
-          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
-            <FiZap className="text-yellow-500" /> High-Compute Node
-          </span>
-          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
-            <FiClock className="text-yellow-500" /> Real-time Knowledge
-          </span>
-        </div>
+      <div className="p-4 flex gap-2">
+        <input
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          className="flex-1 p-2 bg-black text-white"
+          placeholder="Ask mentor..."
+        />
+        <button onClick={handleSendMessage}>
+          <FiSend />
+        </button>
       </div>
     </div>
   );
