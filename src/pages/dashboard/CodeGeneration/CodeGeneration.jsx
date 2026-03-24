@@ -48,7 +48,6 @@ const CodeGeneration = () => {
   const [showBacktestSummary, setShowBacktestSummary] = useState(true);
 
   // ── Latest generated code (for Test Strategy button) ──────
-  const [latestGeneratedCode, setLatestGeneratedCode] = useState(null);
   const [latestStrategyDesc, setLatestStrategyDesc] = useState('');
 
   // ── Copy feedback state ────────────────────────────────────
@@ -63,10 +62,16 @@ const CodeGeneration = () => {
 
     if (state.fromMentor) {
       const strategyType = state.strategyType || '';
-      const context = state.context || '';
-      setNewMessage(
-        `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
-      );
+      const context = state.context || state.strategyText || '';
+      const mentorPrompt = strategyType
+        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
+        : context
+          ? `Create a trading strategy based on: ${context}`
+          : '';
+
+      if (mentorPrompt) {
+        setNewMessage(mentorPrompt);
+      }
     }
 
     if (state.mode === 'improve') {
@@ -86,14 +91,7 @@ const CodeGeneration = () => {
       }
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
-        const history = Array.isArray(res?.history)
-          ? res.history
-          : Array.isArray(res?.messages)
-            ? res.messages
-            : Array.isArray(res)
-              ? res
-              : [];
-        setMessages(history);
+        setMessages(res.history || []);
       } catch (error) {
         console.error('Error fetching logic history:', error);
       } finally {
@@ -151,8 +149,6 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-        setLatestGeneratedCode(response.code || null);
-
         // FIX: Always add the assistant message to state regardless of new/existing conversation
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -206,7 +202,6 @@ const CodeGeneration = () => {
           isImproved: true,
         };
 
-        setLatestGeneratedCode(response.code || null);
         setImprovementMode(false);
 
         // FIX: Always add assistant message before navigating

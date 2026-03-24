@@ -34,11 +34,7 @@ const MentorConversations = () => {
       setConversations(data);
     } catch (error) {
       console.error("Error fetching mentor conversations:", error);
-      if (error?.response?.status === 403) {
-        toast.error("Not authorized to view conversations");
-      } else {
-        toast.error("Failed to fetch conversations");
-      }
+      toast.error("Failed to fetch conversations");
     } finally {
       setLoading(false);
     }
@@ -56,11 +52,7 @@ const MentorConversations = () => {
       setDeleteModal({ open: false, id: null });
     } catch (error) {
       console.error("Error deleting conversation:", error);
-      if (error?.response?.status === 403) {
-        toast.error("Not authorized to delete this conversation", { id: loadingToast });
-      } else {
-        toast.error("Failed to delete", { id: loadingToast });
-      }
+      toast.error("Failed to delete", { id: loadingToast });
     }
   };
 

@@ -58,7 +58,6 @@ const SignalAnalysisPage = () => {
         direction={direction}
         confidence={confidence}
         rationale={`Signal inferred from text analysis (${direction}).`}
-        signalDetected={true}
       />
       <ReasoningPanel points={points} />
     </div>

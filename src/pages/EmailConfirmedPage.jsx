@@ -24,15 +24,15 @@ const EmailConfirmedPage = () => {
 
     (async () => {
       try {
-        await dispatch(confirmEmail({ token_hash, type })).unwrap();
-        setStatus({ loading: false, ok: true, message: "Your email has been verified. Redirecting to login..." });
-      } catch (err) {
-        const fallback = "Your email has been verified. Redirecting to login...";
-        setStatus({ loading: false, ok: true, message: fallback });
-      } finally {
+        const res = await dispatch(confirmEmail({ token_hash, type })).unwrap();
+        setStatus({ loading: false, ok: true, message: "Your email has been confirmed. You can now log in to access your dashboard." });
+
+        // Auto-redirect to login after 3 seconds
         setTimeout(() => {
           navigate("/login");
-        }, 5000);
+        }, 3000);
+      } catch (err) {
+        setStatus({ loading: false, ok: false, message: err || "Confirmation failed." });
       }
     })();
   }, [location.search, dispatch, navigate]);
@@ -60,7 +60,7 @@ const EmailConfirmedPage = () => {
           transition={{ duration: 0.6 }}
         >
           <h1 className="text-3xl font-black text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
-            {status.loading ? "Confirming..." : status.ok ? "Email Verified" : "Confirmation Error"}
+            {status.loading ? "Confirming…" : status.ok ? "Email Confirmed" : "Confirmation Error"}
           </h1>
           <p className="mt-3 text-sm text-gray-400">
             {status.loading ? "Please wait while we confirm your email." : status.message}
