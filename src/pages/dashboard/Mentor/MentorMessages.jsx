@@ -48,27 +48,44 @@ const MentorMessages = () => {
 
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
+  const userId = user?.user_id || user?.id;
 
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!user?.id || conversationId === 'new') {
+      if (!conversationId || conversationId === 'new' || !userId) {
+        setMessages([]);
         setLoading(false);
         return;
       }
 
+      const cacheKey = `fgpt_mentor_history_${conversationId}`;
+
       try {
-        const res = await getConversationHistory(conversationId, user.id);
-        setMessages(res.history || []);
+        const res = await getConversationHistory(conversationId, userId);
+        const history = res.history || [];
+        setMessages(history);
+        localStorage.setItem(cacheKey, JSON.stringify(history));
       } catch (error) {
         console.error('Failed to load history:', error);
-        toast.error('Failed to load history');
+
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            setMessages(JSON.parse(cached));
+          } catch (cacheError) {
+            console.error('Cache parse error:', cacheError);
+            toast.error('Failed to load history');
+          }
+        } else {
+          toast.error('Failed to load history');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchHistory();
-  }, [conversationId, user?.id]);
+  }, [conversationId, userId]);
 
   useEffect(() => {
     if (
@@ -87,12 +104,7 @@ const MentorMessages = () => {
   useEffect(() => {
     const state = location.state;
 
-    if (
-      !user?.id ||
-      state?.mode !== 'analyze' ||
-      analysisMode ||
-      !state?.results
-    ) {
+    if (!userId || state?.mode !== 'analyze' || analysisMode || !state?.results) {
       return;
     }
 
@@ -105,7 +117,7 @@ const MentorMessages = () => {
 
       try {
         const data = await analyzeBacktest({
-          user_id: user.id,
+          user_id: userId,
           strategy_type: state.strategyType,
           results: state.results,
         });
@@ -114,15 +126,26 @@ const MentorMessages = () => {
           return;
         }
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-analysis`,
-            role: 'assistant',
-            content: `**${data.verdict}**\n\n${data.explanation}`,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
+        setMessages((prev) => {
+          const next = [
+            ...prev,
+            {
+              id: `${Date.now()}-analysis`,
+              role: 'assistant',
+              content: `**${data.verdict}**\n\n${data.explanation}`,
+              timestamp: new Date().toISOString(),
+            },
+          ];
+
+          if (conversationId && conversationId !== 'new') {
+            localStorage.setItem(
+              `fgpt_mentor_history_${conversationId}`,
+              JSON.stringify(next)
+            );
+          }
+
+          return next;
+        });
       } catch (error) {
         if (!cancelled) {
           console.error('Analysis failed:', error);
@@ -140,7 +163,7 @@ const MentorMessages = () => {
     return () => {
       cancelled = true;
     };
-  }, [analysisMode, location.state, user?.id]);
+  }, [analysisMode, conversationId, location.state, userId]);
 
   const handleCopy = async (text, successMessage = 'Copied to clipboard') => {
     try {
@@ -153,7 +176,7 @@ const MentorMessages = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending || !user?.id) return;
+    if (!newMessage.trim() || sending || !userId) return;
 
     const userContent = newMessage.trim();
     const userMsg = {
@@ -163,7 +186,19 @@ const MentorMessages = () => {
       timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+
+      if (conversationId && conversationId !== 'new') {
+        localStorage.setItem(
+          `fgpt_mentor_history_${conversationId}`,
+          JSON.stringify(next)
+        );
+      }
+
+      return next;
+    });
+
     setNewMessage('');
     setSending(true);
 
@@ -171,7 +206,7 @@ const MentorMessages = () => {
       const response = await askMentor(
         userContent,
         conversationId === 'new' ? null : conversationId,
-        user.id
+        userId
       );
 
       if (conversationId === 'new' && response?.conversation_id) {
@@ -181,19 +216,42 @@ const MentorMessages = () => {
         return;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-assistant`,
-          role: 'assistant',
-          content: response?.response || 'No response returned.',
-          timestamp: response?.timestamp || new Date().toISOString(),
-        },
-      ]);
+      setMessages((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: `${Date.now()}-assistant`,
+            role: 'assistant',
+            content: response?.response || 'No response returned.',
+            timestamp: response?.timestamp || new Date().toISOString(),
+          },
+        ];
+
+        if (conversationId && conversationId !== 'new') {
+          localStorage.setItem(
+            `fgpt_mentor_history_${conversationId}`,
+            JSON.stringify(next)
+          );
+        }
+
+        return next;
+      });
     } catch (error) {
       console.error('Failed to send message:', error);
       toast.error('Failed to send message');
-      setMessages((prev) => prev.filter((message) => message.id !== userMsg.id));
+
+      setMessages((prev) => {
+        const next = prev.filter((message) => message.id !== userMsg.id);
+
+        if (conversationId && conversationId !== 'new') {
+          localStorage.setItem(
+            `fgpt_mentor_history_${conversationId}`,
+            JSON.stringify(next)
+          );
+        }
+
+        return next;
+      });
     } finally {
       setSending(false);
     }
@@ -216,8 +274,7 @@ const MentorMessages = () => {
     navigate('/dashboard/codegen/session/new', {
       state: {
         mode: 'improve',
-        originalCode:
-          backtestData?.strategyCode || backtestData?.code || '',
+        originalCode: backtestData?.strategyCode || backtestData?.code || '',
         backtestResults: backtestData?.results || {},
         mentorAnalysis: messages[messages.length - 1]?.content || '',
       },
@@ -275,7 +332,8 @@ const MentorMessages = () => {
         ) : (
           messages.map((message, idx) => {
             const showGenerateCode =
-              message.role === 'assistant' && Boolean(detectStrategyType(message.content));
+              message.role === 'assistant' &&
+              Boolean(detectStrategyType(message.content));
             const showImproveStrategy =
               message.role === 'assistant' &&
               analysisMode &&
@@ -308,6 +366,7 @@ const MentorMessages = () => {
                       components={{
                         code({ className, children, ...props }) {
                           const match = /language-(\w+)/.exec(className || '');
+
                           return match ? (
                             <div className="rounded-lg overflow-hidden my-4 border border-white/10 relative group/code">
                               <div className="absolute right-2 top-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">

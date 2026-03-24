@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { setUser, logoutUser } from "../features/auth/authSlice";
 
 const useAuth = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,7 +29,7 @@ const useAuth = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     dispatch(logoutUser());
-    window.location.href = "/login";
+    navigate("/login");
   };
 
   return { loading, logout };
