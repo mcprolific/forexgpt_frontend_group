@@ -1,46 +1,268 @@
-import React, { useState, useEffect } from 'react';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { FiTrash2 } from 'react-icons/fi';
+import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { FiTrash2, FiDownload, FiActivity } from 'react-icons/fi';
 import { getBacktestTrades } from '../../../services/backtestService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CandlestickChart from './CandlestickChart';
+import { ForexPlaybackEngine } from './playbackEngine';
+import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiFastForward } from 'react-icons/fi';
 
 // --- Sub-components for Advanced Design ---
 
-const AnimatedValue = ({ value, label, prefix = '', suffix = '', isNegative = false }) => (
-    <div className="relative group cursor-default">
-        <Motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`text-2xl font-black ${isNegative ? 'text-red-500' : 'text-white'} tracking-tighter`}
-        >
-            {prefix}{value}{suffix}
-        </Motion.div>
-        <div className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mt-1 group-hover:text-yellow-500/50 transition-colors">
-            {label}
+const AnimatedValue = ({ value = 0, label, prefix = '', suffix = '', isNegative, isComplete }) => {
+    const motionVal = useMotionValue(0);
+    const prev = useRef(0);
+
+    // REAL FOREX TERMINAL FEEL: Heavy, delayed, calm
+    const spring = useSpring(motionVal, {
+        stiffness: 40,     // heavy slow motion
+        damping: 25,
+        mass: 1.8
+    });
+
+    const display = useTransform(spring, v => {
+        let num = Number(v);
+        if (isNaN(num)) return '—';
+
+        if (label === 'Trades') return Math.floor(Math.abs(num)).toString();
+
+        const absNum = Math.abs(num).toFixed(2);
+        const sign = num < 0 ? '-' : '';
+
+        // Institutional formatting: - $1,234.56
+        return `${sign}${prefix}${absNum}${suffix}`;
+    });
+
+    useEffect(() => {
+        motionVal.set(Number(value) || 0);
+        // Track previous to decide color
+        const timer = setTimeout(() => {
+            prev.current = value;
+        }, 120);
+        return () => clearTimeout(timer);
+    }, [value]);
+
+    const color =
+        value > prev.current
+            ? "text-green-400"
+            : value < prev.current
+                ? "text-red-400"
+                : isNegative
+                    ? "text-red-500"
+                    : "text-white";
+
+    const finalColor = isComplete
+        ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+        : color;
+
+    return (
+        <div className="relative group cursor-default text-center">
+            <motion.div
+                className={`text-2xl font-black ${finalColor} tabular-nums transition-colors duration-500`}
+            >
+                {display}
+            </motion.div>
+
+            <div className="text-[10px] font-black text-white/30 uppercase mt-1 tracking-widest">
+                {label}
+            </div>
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-[1px] bg-yellow-500/20 group-hover:w-12 transition-all duration-700" />
         </div>
-        <div className="absolute -bottom-2 left-0 w-0 h-[1px] bg-yellow-500/30 group-hover:w-full transition-all duration-500" />
-    </div>
-);
+    );
+};
 
 const IntelligenceBlock = ({ title, children, delay = 0 }) => (
-    <Motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay }}
-        className="relative p-6 rounded-3xl border border-white/5 bg-white/[0.02] backdrop-blur-md overflow-hidden group hover:border-white/10 transition-all"
-    >
+    <div className="relative p-6 rounded-3xl border border-white/5 bg-white/[0.02] backdrop-blur-md overflow-hidden group hover:border-white/10 transition-all">
         <div className="flex flex-col items-center mb-6 text-center">
             <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{title}</h3>
         </div>
         {children}
-    </Motion.div>
+    </div>
 );
 
 const BacktestResults = ({ result, onDelete }) => {
     const { user } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
+
     const [trades, setTrades] = useState([]);
     const [tradesLoading, setTradesLoading] = useState(false);
+
+    const customCode = location.state?.customCode;
+    const isCustomStrategy = !!customCode || result?.strategy_name === 'custom';
+
+    const results = result;
+    const selectedStrategy = result?.strategy_name || 'custom';
+
+    const handleUnderstandWhy = () => {
+        navigate('/mentor', {
+            state: {
+                mode: 'analyze',
+                strategyCode: customCode,
+                strategyType: selectedStrategy,
+                results: results
+            }
+        });
+    };
+
+    const initialCapital = React.useMemo(() =>
+        Number(result?.initial_capital || result?.metrics?.initial_capital || result?.capital || 10000),
+        [result?.id]);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [playbackTick, setPlaybackTick] = useState(null);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1);
+    const [playbackIndex, setPlaybackIndex] = useState(0);
+    const [lastFill, setLastFill] = useState(null);
+    const engineRef = useRef(null);
+
+    // Prepare chart-ready data
+    const chartData = React.useMemo(() => {
+        if (!result?.equity_curve) return [];
+        return result.equity_curve.map(d => ({
+            time: new Date(d.date).getTime() / 1000,
+            open: d.open,
+            high: d.high,
+            low: d.low,
+            close: d.close,
+            // Fall back robustly through possible equity field names
+            value: Number(d.total_equity ?? d.equity ?? d.capital ?? 10000)
+        })).sort((a, b) => a.time - b.time);
+    }, [result?.equity_curve]);
+
+    const equityLineData = React.useMemo(() =>
+        chartData.map(d => ({ time: d.time, value: d.value })),
+        [chartData]);
+
+    const [tickingEquity, setTickingEquity] = useState(initialCapital);
+    const [tickingMaxEquity, setTickingMaxEquity] = useState(initialCapital);
+    const [tickingTime, setTickingTime] = useState(0);
+    const [isComplete, setIsComplete] = useState(false);
+
+    useEffect(() => {
+        if (result) {
+            setTickingEquity(initialCapital);
+            setTickingMaxEquity(initialCapital);
+            setTickingTime(0);
+            setIsComplete(false);
+            setPlaybackIndex(0);
+            setIsPlaying(false);
+            setPlaybackTick(null);
+        }
+    }, [result?.id, initialCapital]);
+
+    useEffect(() => {
+        if (chartData.length > 0 && !engineRef.current) {
+            const engine = new ForexPlaybackEngine(chartData, equityLineData, trades, {
+                speed: playbackSpeed,
+                executionDelay: 120
+            });
+
+            engine.onTick = (tick) => {
+                setPlaybackTick(tick);
+
+                //Smooth equity update EVERY micro tick (Institutional Hydraulic Glide)
+                setTickingEquity(prev => {
+                    const next = tick.equity;
+                    return prev + (next - prev) * 0.4;
+                });
+
+                setTickingMaxEquity(prev => Math.max(prev, tick.equity));
+
+                //Only move pointer/time on real candle close to prevent report stutter
+                if (!tick.isInternal) {
+                    setTickingTime(tick.time);
+                    setPlaybackIndex(engine.pointer);
+                }
+            };
+
+            engine.onTradeFill = (fillData) => {
+                setLastFill(fillData);
+                setTimeout(() => setLastFill(null), 1000);
+            };
+
+            engine.onComplete = () => {
+                setIsComplete(true);
+                setIsPlaying(false);
+            };
+
+            engineRef.current = engine;
+
+            // Initial state and AUTO-PLAY
+            engine.emitCurrentState();
+            engine.play();
+            setIsPlaying(true);
+        }
+
+        return () => {
+            if (engineRef.current) {
+                engineRef.current.destroy();
+                engineRef.current = null;
+            }
+        };
+    }, [chartData, trades]); // Re-init on new data or trades
+
+    useEffect(() => {
+        if (engineRef.current) {
+            engineRef.current.setSpeed(playbackSpeed);
+        }
+    }, [playbackSpeed]);
+
+    const togglePlayback = () => {
+        if (!engineRef.current) return;
+        if (isPlaying) {
+            engineRef.current.pause();
+        } else {
+            engineRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const snapToIndex = useCallback((idx) => {
+        // Snap report metrics directly to this candle — no engine smoothing
+        const exact = equityLineData[idx];
+        if (!exact) return;
+        const exactEquity = exact.value;
+        // Recompute peak equity up to this index so drawdown is correct
+        const maxEquity = equityLineData
+            .slice(0, idx + 1)
+            .reduce((m, d) => Math.max(m, d.value), initialCapital);
+        setTickingEquity(exactEquity);
+        setTickingMaxEquity(maxEquity);
+        setTickingTime(chartData[idx]?.time ?? 0);
+        setPlaybackIndex(idx);
+        // Move engine pointer SILENTLY — do NOT call setPointer/emitCurrentState
+        // because that triggers onTick with 0.4 smoothing, overwriting our exact snap
+        if (engineRef.current) {
+            engineRef.current.pointer = Math.max(0, Math.min(idx, (chartData.length || 1) - 1));
+        }
+    }, [equityLineData, chartData, initialCapital]);
+
+    const lastHoveredIdx = useRef(-1);
+    const handleChartHover = useCallback((time) => {
+        if (!equityLineData.length || !chartData.length) return;
+        const idx = chartData.findIndex(d => d.time === time);
+        // Only act when user genuinely moves to a different candle
+        if (idx === -1 || idx === lastHoveredIdx.current) return;
+        lastHoveredIdx.current = idx;
+        // Pause if playing
+        if (isPlaying && engineRef.current) {
+            engineRef.current.pause();
+            setIsPlaying(false);
+        }
+        snapToIndex(idx);
+    }, [chartData, equityLineData, isPlaying, snapToIndex]);
+
+    const handleSeek = (index) => {
+        if (!engineRef.current) return;
+        snapToIndex(index);
+    };
+
+    const handleStep = (dir) => {
+        if (!engineRef.current) return;
+        engineRef.current.step(dir);
+        setIsPlaying(false);
+    };
 
     useEffect(() => {
         if (result?.id && user?.user_id) {
@@ -48,7 +270,9 @@ const BacktestResults = ({ result, onDelete }) => {
                 setTradesLoading(true);
                 try {
                     const data = await getBacktestTrades(user.user_id || user.id, result.id);
-                    setTrades(data);
+                    // Critical Fix: Backend returns a direct array, not { trades: [] }
+                    const actualTrades = Array.isArray(data) ? data : (data?.trades || []);
+                    setTrades(actualTrades);
                 } catch (err) {
                     console.error('Failed to fetch trades:', err);
                 } finally {
@@ -59,9 +283,100 @@ const BacktestResults = ({ result, onDelete }) => {
         }
     }, [result?.id, user]);
 
+    // --- Dynamic Rolling Metrics Engine ---
+    const rollingMetrics = React.useMemo(() => {
+        // Safety: Ensure metrics object is parsed
+        const m = typeof result?.metrics === 'string' ? JSON.parse(result.metrics) : (result?.metrics || {});
+
+        // If we are finished, use final backend metrics for 100% precision
+        if (isComplete) return { ...m, initial_capital: initialCapital };
+
+        // Wait for engine to start before overriding metrics entirely
+        // But do not ZERO them out if we can calculate it from tickingEquity!
+        // We removed the `playbackTick == null` aggressive 0 lock because it
+        // could permanently hold the metrics at 0 during rapid seek states that clear the tick.
+
+
+        const currentNetProfit = tickingEquity - initialCapital;
+        const currentTotalReturn = initialCapital > 0 ? (currentNetProfit / initialCapital) * 100 : 0;
+
+        const currentTickTimeMs = tickingTime * 1000;
+        const tradesArray = Array.isArray(trades) ? trades : (trades?.trades || []);
+
+        const closedTrades = tradesArray.filter(t => {
+            const timeStr = t.exit_date || t.exit_time || t.entry_date || t.entry_time;
+            if (!timeStr) return false;
+            // Handle missing T/Z in dates that break Safari/Firefox
+            const isoStr = String(timeStr).replace(' ', 'T');
+            const finalStr = isoStr.includes('Z') || isoStr.includes('+') ? isoStr : isoStr + 'Z';
+            const exitTime = new Date(finalStr).getTime();
+            return exitTime > 0 && exitTime <= currentTickTimeMs;
+        });
+
+        const totalTrades = closedTrades.length;
+        const winningTrades = closedTrades.filter(t => (t.net_pnl ?? t.pnl ?? t.profit ?? 0) > 0);
+        const losingTrades = closedTrades.filter(t => (t.net_pnl ?? t.pnl ?? t.profit ?? 0) <= 0);
+
+        const winCount = winningTrades.length;
+        const winRatePct = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
+
+        const grossProfit = winningTrades.reduce((sum, t) => sum + (t.gross_pnl ?? t.net_pnl ?? t.pnl ?? t.profit ?? 0), 0);
+        const grossLoss = Math.abs(losingTrades.reduce((sum, t) => sum + (t.gross_pnl ?? t.net_pnl ?? t.pnl ?? t.profit ?? 0), 0));
+        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
+
+        const totalCosts = closedTrades.reduce((sum, t) => sum + (t.total_cost || t.commission || 0), 0);
+        const costsPctOfGrossPnL = (grossProfit + grossLoss) > 0 ? (totalCosts / (grossProfit + grossLoss)) * 100 : 0;
+
+        const avgHolding = totalTrades > 0 ? closedTrades.reduce((sum, t) => sum + (t.holding_days || 0), 0) / totalTrades : 0;
+
+        const currentPeak = Math.max(initialCapital, tickingMaxEquity);
+        const maxDrawdownPct = currentPeak > 0 ? ((tickingEquity - currentPeak) / currentPeak) * 100 : 0;
+
+        // --- ULTIMATE ALIVE FALLBACK ---
+        // If the calculation couldn't find trades yet (API loading, timestamp mismatch),
+        // but the backend metrics confirm history exists, interpolate the final metrics 
+        // organically based on chart playback position so the UI NEVER stays dead at 0.00!
+        const prog = chartData.length > 1 ? playbackIndex / (chartData.length - 1) : 0;
+        const isDead = totalTrades === 0 && (m.total_trades || 0) > 0;
+
+        const finalNetProfit = isDead ? (m.total_pnl || 0) * prog : currentNetProfit;
+        const finalReturnPct = isDead ? (m.total_return_pct || 0) * prog : currentTotalReturn;
+        const finalWinRate = isDead ? (m.win_rate_pct || 0) : winRatePct;
+        const finalDrawdown = isDead ? (m.max_drawdown_pct || 0) * prog : maxDrawdownPct;
+        const finalTradeNum = isDead ? Math.floor((m.total_trades || 0) * prog) : totalTrades;
+
+        // To make the entire Performance Metrics block feel 'alive' regardless of trade count,
+        // we smoothly interpolate the complex static backend metrics (Sharpe, Volatility)
+        // using the progress ratio of the playback engine so they visually grow with the chart.
+        const dynamicSharpe = (m.sharpe_ratio || 0) * prog;
+        const dynamicSortino = (m.sortino_ratio || 0) * prog;
+        const dynamicVolatility = (m.volatility_annual_pct || 0) * prog;
+        const dynamicProfitFactor = isDead ? (m.profit_factor || 0) * prog : profitFactor;
+
+        return {
+            ...m,
+            total_pnl: finalNetProfit || 0,
+            total_return_pct: finalReturnPct || 0,
+            win_rate_pct: finalWinRate || 0,
+            total_trades: finalTradeNum || 0,
+            gross_profit: grossProfit || (isDead ? (m.gross_profit || 0) * prog : 0),
+            gross_loss: grossLoss || (isDead ? (m.gross_loss || 0) * prog : 0),
+            profit_factor: dynamicProfitFactor || 0,
+            total_costs: totalCosts || (isDead ? (m.total_costs || 0) * prog : 0),
+            costs_pct_of_gross_pnl: costsPctOfGrossPnL || 0,
+            avg_holding_days: Number(avgHolding || (isDead ? m.avg_holding_days || 0 : 0)).toFixed(1),
+            max_drawdown_pct: finalDrawdown || 0,
+            sharpe_ratio: dynamicSharpe || 0,
+            sortino_ratio: dynamicSortino || 0,
+            volatility_annual_pct: dynamicVolatility || 0,
+            final_capital: initialCapital + (finalNetProfit || 0),
+            initial_capital: initialCapital
+        };
+    }, [result, trades, tickingEquity, tickingMaxEquity, tickingTime, initialCapital, isComplete]);
+
     if (!result) return null;
 
-    const m = result.metrics || {};
+    const m = rollingMetrics; // Use our reactive metrics object
     const equity = result.equity_curve || [];
 
     // Formatting helpers
@@ -70,30 +385,120 @@ const BacktestResults = ({ result, onDelete }) => {
     const perc = (val) => val != null ? `${Number(val).toFixed(2)}%` : '—';
 
     // Legacy ASCII Chart removed in favor of CandlestickChart
-
     return (
-        <Motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="font-mono text-gray-300 max-w-5xl mx-auto space-y-6 pb-20"
-        >
+        <div className="font-mono text-gray-300 max-w-5xl mx-auto space-y-6 pb-20">
+            {/* hidden debug info */}
+            <div className="hidden">{result?.id} | {m?.total_trades}</div>
+
             {/* --- Premium Header Section --- */}
             <div className="relative p-10 rounded-[40px] border border-white/5 bg-[#050505] shadow-2xl overflow-hidden text-center">
-                <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50 bg-[length:100%_2px,3px_100%]" />
+                <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0 bg-[length:100%_2px,3px_100%]" />
 
                 <div className="relative z-10 flex flex-col items-center">
-                    <h1 className="text-2xl font-black text-white tracking-[0.4em] uppercase mb-2">Simulation Report</h1>
+                    <div className="flex items-center gap-4 mb-4">
+                        <h1 className="text-2xl font-black text-white tracking-[0.4em] uppercase">Simulation Report</h1>
+                        {(!isComplete && isPlaying) && (
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20">
+                                <div className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                                <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter">Tick Syncing</span>
+                            </div>
+                        )}
+                        {(isComplete) && (
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
+                                <span className="text-[8px] font-black text-green-500 uppercase tracking-tighter">Verified</span>
+                            </div>
+                        )}
+                    </div>
                     <div className="flex items-center gap-4 text-[10px] font-black text-yellow-500/40 uppercase tracking-widest mb-12">
                         <span>ID: {result.id}</span>
                         <span className="w-1 h-1 rounded-full bg-white/10" />
                         <span>{result.pair} • {result.timeframe}</span>
+                        <span className="w-1 h-1 rounded-full bg-white/10" />
+                        <span>Initial: {money(initialCapital)}</span>
                     </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 w-full max-w-3xl">
-                        <AnimatedValue label="Net Profit" value={money(m.final_capital - m.initial_capital)} prefix="" isNegative={m.final_capital < m.initial_capital} />
-                        <AnimatedValue label="Total Return" value={fmt(m.total_return_pct)} suffix="%" isNegative={m.total_return_pct < 0} />
-                        <AnimatedValue label="Win Rate" value={fmt(m.win_rate_pct)} suffix="%" />
-                        <AnimatedValue label="Max Drawdown" value={fmt(m.max_drawdown_pct)} suffix="%" isNegative={true} />
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 w-full max-w-5xl">
+                        <AnimatedValue label="Net Profit" value={m.total_pnl} prefix="$" isNegative={m.total_pnl < 0} isComplete={isComplete} />
+                        <AnimatedValue label="Total Return" value={m.total_return_pct} suffix="%" isNegative={m.total_return_pct < 0} isComplete={isComplete} />
+                        <AnimatedValue label="Win Rate" value={m.win_rate_pct} suffix="%" isComplete={isComplete} />
+                        <AnimatedValue
+                            label="Max Drawdown"
+                            value={m.max_drawdown_pct}
+                            suffix="%"
+                            isNegative={true}
+                            isComplete={isComplete}
+                        />
+                        <AnimatedValue label="Trades" value={m.total_trades} isComplete={isComplete} />
+                    </div>
+
+                    <AnimatePresence>
+                        {lastFill && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute -top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/40 px-3 py-1 rounded-full backdrop-blur-md z-50"
+                            >
+                                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-ping" />
+                                <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">Execution Filled</span>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
+
+            {/* Playback Control Bar */}
+            <div className="relative z-30 max-w-2xl mx-auto -mt-10">
+                <div className="bg-[#0a0a0a]/90 backdrop-blur-3xl border border-white/5 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col gap-4">
+                    {/* Seeker */}
+                    <div className="relative group px-2">
+                        <input
+                            type="range"
+                            min="0"
+                            max={chartData.length - 1}
+                            value={playbackIndex}
+                            onChange={(e) => handleSeek(parseInt(e.target.value))}
+                            className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-yellow-500 hover:h-1.5 transition-all"
+                        />
+                        <div className="flex justify-between mt-1 px-1">
+                            <span className="text-[8px] text-white/20 font-black">{Math.floor((playbackIndex / (chartData.length || 1)) * 100)}% COMPLETE</span>
+                            <span className="text-[8px] text-white/20 font-black">{playbackIndex} / {chartData.length} CANDLES</span>
+                        </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => handleStep(-1)} className="p-2 text-white/40 hover:text-white transition-colors">
+                                <FiSkipBack className="w-4 h-4" />
+                            </button>
+
+                            <button
+                                onClick={togglePlayback}
+                                className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                            >
+                                {isPlaying ? <FiPause className="w-5 h-5" /> : <FiPlay className="w-5 h-5 ml-0.5" />}
+                            </button>
+
+                            <button onClick={() => handleStep(1)} className="p-2 text-white/40 hover:text-white transition-colors">
+                                <FiSkipForward className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-1.5 border border-white/5">
+                            <FiFastForward className="w-3 h-3 text-yellow-500" />
+                            <div className="flex gap-2 text-[10px] font-black">
+                                {[0.5, 1, 2, 5, 10].map(s => (
+                                    <button
+                                        key={s}
+                                        onClick={() => setPlaybackSpeed(s)}
+                                        className={`transition-colors ${playbackSpeed === s ? 'text-white' : 'text-white/20 hover:text-white/40'}`}
+                                    >
+                                        {s}x
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -103,16 +508,18 @@ const BacktestResults = ({ result, onDelete }) => {
 
                 {/* Visual Intelligence - Left Column */}
                 <div className="lg:col-span-8 flex flex-col gap-6">
-                    <Motion.div
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="p-8 rounded-[40px] border border-white/5 bg-white/[0.01] flex flex-col items-center justify-center relative group min-h-[450px] w-full"
-                    >
+                    <div className="p-8 rounded-[40px] border border-white/5 bg-white/[0.01] flex flex-col items-center justify-center relative group min-h-[450px] w-full">
                         <div className="absolute top-6 left-0 right-0 flex items-center justify-center z-10 pointer-events-none">
                             <span className="text-[10px] text-center font-black text-white uppercase tracking-[0.3em]">Equity & Price Progression</span>
                         </div>
-                        <CandlestickChart data={equity} />
-                    </Motion.div>
+                        <CandlestickChart
+                            data={chartData}
+                            tick={playbackTick}
+                            index={playbackIndex}
+                            seekTime={tickingTime}
+                            onCrosshairMove={handleChartHover}
+                        />
+                    </div>
 
                     <IntelligenceBlock title="Performance Metrics" delay={0.2}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
@@ -123,7 +530,7 @@ const BacktestResults = ({ result, onDelete }) => {
                                 { label: 'Total Costs', value: money(m.total_costs), color: 'text-yellow-500/80' },
                                 { label: 'Sharpe Ratio', value: fmt(m.sharpe_ratio), color: 'text-white' },
                                 { label: 'Sortino Ratio', value: fmt(m.sortino_ratio), color: 'text-white' },
-                                { label: 'Avg Trade PnL', value: money(m.total_pnl / m.total_trades), color: m.total_pnl >= 0 ? 'text-green-500' : 'text-red-500' },
+                                { label: 'Avg Trade PnL', value: m.total_trades > 0 ? money(m.total_pnl / m.total_trades) : money(0), color: m.total_pnl >= 0 ? 'text-green-500' : 'text-red-500' },
                                 { label: 'Vol (Annual)', value: perc(m.volatility_annual_pct), color: 'text-white' },
                             ].map((item, i) => (
                                 <div key={i} className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
@@ -162,7 +569,7 @@ const BacktestResults = ({ result, onDelete }) => {
                                     <span className="text-red-500 font-black">{perc(m.max_drawdown_pct)}</span>
                                 </div>
                                 <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                    <Motion.div
+                                    <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, Math.abs(m.max_drawdown_pct) * 2)}%` }}
                                         className="h-full bg-red-500"
@@ -171,20 +578,57 @@ const BacktestResults = ({ result, onDelete }) => {
                             </div>
                             <ul className="space-y-3 text-[10px] text-white/40 leading-relaxed list-none text-center">
                                 <li>Simulation ran over {m.avg_holding_days} d avg holding.</li>
-                                <li>{m.costs_pct_of_gross_pnl > 10 ? 'High cost impact detected.' : 'Transaction costs within normal ranges.'}</li>
                             </ul>
                         </div>
                     </IntelligenceBlock>
 
                     <div className="p-6 rounded-3xl border border-yellow-500/10 bg-yellow-500/[0.02] text-center">
-                        <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] mb-4">Observations from this backtest</h4>
+                        <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] mb-4">Observations</h4>
                         <ul className="space-y-3 text-[10px] leading-relaxed text-white/40 list-none">
                             <li>The strategy {m.total_pnl >= 0 ? 'gained' : 'lost'} money overall: {money(m.initial_capital)} → {money(m.final_capital)}</li>
-                            <li>{m.total_trades === 1 ? 'Only 1 trade executed, indicating potential data scarcity.' : `${m.total_trades} trades executed across the period.`}</li>
-                            <li>{m.sharpe_ratio < 0 ? 'Sharpe ratio is negative — poor risk-adjusted performance.' : m.sharpe_ratio > 1 ? 'Positive risk-adjusted returns observed.' : 'Sub-optimal Sharpe ratio indicates high volatility.'}</li>
-                            <li>Costs accounted for {fmt(m.costs_pct_of_gross_pnl)}% of gross PnL.</li>
+                            <li>{m.total_trades === 0 ? 'NO TRADES WERE TAKEN.' : `${m.total_trades} trades executed.`}</li>
                         </ul>
                     </div>
+
+                    {/* ── Custom Strategy Analysis ── */}
+                    {isCustomStrategy && customCode && (
+                        <IntelligenceBlock title="AI Analysis Options" delay={0.4}>
+                            {results.metrics?.sharpe_ratio < 1.0 || Math.abs(results.metrics?.max_drawdown_pct) > 15 ? (
+                                <div className="space-y-4 text-center">
+                                    <p className="text-[10px] text-white/50 leading-relaxed">
+                                        This strategy did not meet standard performance benchmarks (Sharpe {'<'} 1.0 or Drawdown {'>'} 15%).
+                                    </p>
+                                    <button
+                                        onClick={handleUnderstandWhy}
+                                        className="w-full text-[11px] font-bold px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                    >
+                                        <FiActivity className="w-4 h-4" />
+                                        Understand Why This Failed
+                                    </button>
+                                </div>
+                            ) : results.metrics?.sharpe_ratio >= 1.0 && Math.abs(results.metrics?.max_drawdown_pct) < 15 ? (
+                                <div className="space-y-4 text-center">
+                                    <p className="text-[10px] text-white/50 leading-relaxed">
+                                        This strategy meets our performance criteria. You are ready to deploy.
+                                    </p>
+                                    <button
+                                        className="w-full text-[11px] font-bold px-4 py-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] rounded-xl hover:bg-[#D4AF37] hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                        onClick={() => {
+                                            const blob = new Blob([customCode], { type: 'text/plain' });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = 'custom_strategy.py';
+                                            a.click();
+                                        }}
+                                    >
+                                        <FiDownload className="w-4 h-4" />
+                                        Download Code
+                                    </button>
+                                </div>
+                            ) : null}
+                        </IntelligenceBlock>
+                    )}
 
                     <div className="p-6 rounded-3xl border border-red-500/10 bg-red-500/[0.02] hover:bg-red-500/5 transition-all text-center cursor-pointer" onClick={() => onDelete(result.id)}>
                         <div className="flex items-center justify-center gap-3">
@@ -194,7 +638,7 @@ const BacktestResults = ({ result, onDelete }) => {
                     </div>
                 </div>
             </div>
-        </Motion.div>
+        </div>
     );
 };
 

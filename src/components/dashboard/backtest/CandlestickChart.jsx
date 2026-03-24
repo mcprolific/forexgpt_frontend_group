@@ -1,19 +1,29 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 
-const CandlestickChart = ({ data, colors = {} }) => {
+const CandlestickChart = ({ data, tick, index, colors = {}, onCrosshairMove, seekTime }) => {
     const {
         backgroundColor = 'transparent',
         lineColor = '#eab308',
         textColor = '#a1a1aa',
-        areaTopColor = '#eab308',
-        areaBottomColor = 'rgba(234, 179, 8, 0)',
     } = colors;
 
     const chartContainerRef = useRef();
+    const chartRef = useRef();
+    const candleSeriesRef = useRef();
+    const equitySeriesRef = useRef();
+    // Keep latest callback in a ref so the subscribed handler never goes stale
+    const onCrosshairMoveRef = useRef(onCrosshairMove);
+    // Track whether the crosshair move came from us (seekTime) to avoid echo loops
+    const isProgrammaticSeek = useRef(false);
 
     useEffect(() => {
-        if (!data || data.length === 0) return;
+        onCrosshairMoveRef.current = onCrosshairMove;
+    }, [onCrosshairMove]);
+
+    // ── Chart initialisation ───────────────────────────────────────────────
+    useEffect(() => {
+        if (!chartContainerRef.current) return;
 
         const handleResize = () => {
             chart.applyOptions({ width: chartContainerRef.current.clientWidth });
@@ -33,20 +43,13 @@ const CandlestickChart = ({ data, colors = {} }) => {
             height: 400,
             crosshair: {
                 mode: 0,
-                vertLine: {
-                    labelBackgroundColor: '#333',
-                },
-                horzLine: {
-                    labelBackgroundColor: '#333',
-                },
+                vertLine: { labelBackgroundColor: '#333' },
+                horzLine: { labelBackgroundColor: '#333' },
             },
-            rightPriceScale: {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-            },
+            rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.1)' },
             timeScale: {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
                 timeVisible: true,
-                secondsVisible: false,
             },
         });
 
@@ -70,40 +73,83 @@ const CandlestickChart = ({ data, colors = {} }) => {
             borderColor: 'rgba(255, 255, 255, 0.1)',
         });
 
-        // Prepare data
-        const candlestickData = data
-            .filter(d => d.open != null && d.high != null && d.low != null && d.close != null)
-            .map(d => ({
-                time: new Date(d.date).getTime() / 1000,
-                open: d.open,
-                high: d.high,
-                low: d.low,
-                close: d.close,
-            }))
-            .sort((a, b) => a.time - b.time);
-
-        const equityLineData = data
-            .map(d => ({
-                time: new Date(d.date).getTime() / 1000,
-                value: d.total_equity || d.capital,
-            }))
-            .sort((a, b) => a.time - b.time);
-
-        if (candlestickData.length > 0) {
-            candlestickSeries.setData(candlestickData);
-        }
-        
-        equitySeries.setData(equityLineData);
-
-        chart.timeScale().fitContent();
+        chartRef.current = chart;
+        candleSeriesRef.current = candlestickSeries;
+        equitySeriesRef.current = equitySeries;
 
         window.addEventListener('resize', handleResize);
 
+        // Only fire callback if the user actually moved the crosshair manually,
+        // not when we programmatically sought to a position.
+        const crosshairHandler = (param) => {
+            if (isProgrammaticSeek.current) return;
+            if (param.time == null || param.point == null) return;
+            onCrosshairMoveRef.current?.(param.time);
+        };
+
+        chart.subscribeCrosshairMove(crosshairHandler);
+
         return () => {
             window.removeEventListener('resize', handleResize);
+            chart.unsubscribeCrosshairMove(crosshairHandler);
             chart.remove();
         };
-    }, [data, backgroundColor, lineColor, textColor]);
+    }, [backgroundColor, lineColor, textColor]);
+
+    // ── Incremental playback ticks ─────────────────────────────────────────
+    useEffect(() => {
+        if (tick && candleSeriesRef.current && equitySeriesRef.current) {
+            try {
+                candleSeriesRef.current.update(tick.candle);
+                equitySeriesRef.current.update({ time: tick.time, value: tick.equity });
+            } catch (err) {
+                console.warn('Incremental update skipped:', err.message);
+            }
+        }
+    }, [tick]);
+
+    // ── Seeking / data slice ───────────────────────────────────────────────
+    const prevIndexRef = useRef(-1);
+    useEffect(() => {
+        if (data && data.length > 0 && candleSeriesRef.current && equitySeriesRef.current) {
+            // Only use the heavy .setData() method on initial load or large seeks!
+            // During playback, we skip this so .update() handles the smooth flow (ALIVE effect)
+            if (prevIndexRef.current === -1 || Math.abs((index || 0) - prevIndexRef.current) > 1) {
+                const visibleData = data.slice(0, (index || 0) + 1);
+                const visibleEquity = visibleData.map(d => ({ time: d.time, value: d.value }));
+                candleSeriesRef.current.setData(visibleData);
+                equitySeriesRef.current.setData(visibleEquity);
+            }
+            prevIndexRef.current = index;
+        }
+    }, [data, index]);
+
+    // ── Scroll chart to follow playback position ───────────────────────────
+    useEffect(() => {
+        if (seekTime == null || !chartRef.current) return;
+        isProgrammaticSeek.current = true;
+        try {
+            const ts = chartRef.current.timeScale();
+            const visibleRange = ts.getVisibleLogicalRange();
+            const coord = ts.timeToCoordinate(seekTime);
+            if (coord !== null && visibleRange) {
+                const logical = ts.coordinateToLogical(coord);
+                if (logical !== null) {
+                    const rangeSize = visibleRange.to - visibleRange.from;
+                    // Only pan if current candle is near the edges (< 15% margin)
+                    if (logical < visibleRange.from + rangeSize * 0.15 ||
+                        logical > visibleRange.to - rangeSize * 0.15) {
+                        ts.setVisibleLogicalRange({
+                            from: logical - rangeSize * 0.7,
+                            to: logical + rangeSize * 0.3,
+                        });
+                    }
+                }
+            }
+        } catch (_) {}
+        // Allow a tick before re-enabling crosshair callbacks
+        requestAnimationFrame(() => { isProgrammaticSeek.current = false; });
+    }, [seekTime]);
 
     return (
         <div className="w-full relative">
