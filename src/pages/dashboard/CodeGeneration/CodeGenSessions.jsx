@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getConversations, deleteConversation } from "../../../services/codeGenService";
 import { FiCode, FiPlus, FiClock, FiChevronRight, FiTrash2, FiCpu } from "react-icons/fi";
@@ -21,7 +21,8 @@ const CodeGenSessions = () => {
         navigate('/dashboard/codegen/session/new');
     };
 
-    const fetchSessions = async () => {
+    // FIX: Wrapped in useCallback so it can be safely included in useEffect deps
+    const fetchSessions = useCallback(async () => {
         if (!user?.id) {
             setLoading(false);
             return;
@@ -29,14 +30,18 @@ const CodeGenSessions = () => {
         try {
             setLoading(true);
             const data = await getConversations(user.id);
-            setSessions(data || []);
+            // FIX: Filter out any sessions with missing conversation_id to prevent broken navigation
+            const validSessions = (data || []).filter(
+                (session) => session?.conversation_id
+            );
+            setSessions(validSessions);
         } catch (error) {
             console.error("Error fetching code generation history:", error);
             toast.error("Failed to fetch sessions");
         } finally {
             setLoading(false);
         }
-    };
+    }, [user?.id]);
 
     const handleDelete = async () => {
         if (!deleteModal.id || !user?.id) return;
@@ -59,9 +64,16 @@ const CodeGenSessions = () => {
         setDeleteModal({ open: true, id });
     };
 
+    // FIX: fetchSessions now stable via useCallback, safe to include in deps
     useEffect(() => {
         fetchSessions();
-    }, [user?.id]);
+    }, [fetchSessions]);
+
+    // FIX: Safe description truncation helper — handles null/undefined gracefully
+    const truncateDescription = (description, maxLength = 30) => {
+        const safe = description || 'Neural Logic';
+        return safe.length > maxLength ? safe.substring(0, maxLength) + '...' : safe;
+    };
 
     const container = {
         hidden: { opacity: 0 },
@@ -90,12 +102,14 @@ const CodeGenSessions = () => {
                         <FiCpu className="text-yellow-500" />
                         Logic <span className="bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})` }}>Intelligence</span>
                     </h1>
-                    <p className="text-gray-500 text-sm mt-1 uppercase tracking-widest font-bold">Past algorithmic blueprints from your Neural Logic Architect.</p>
+                    <p className="text-gray-500 text-sm mt-1 uppercase tracking-widest font-bold">
+                        Past algorithmic blueprints from your Neural Logic Architect.
+                    </p>
                 </div>
 
-              <button
+                <button
                     onClick={handleNewSession}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-yellow-500 text-black font-black text-xs hover:brightness-110 transition-all shadow-lg shadow-yellow-500/10"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-yellow-500 text-black font-black text-xs hover:brightness-110 transition-all shadow-lg shadow-yellow-500/10"
                 >
                     <FiPlus size={16} /> New Logic
                 </button>
@@ -110,7 +124,7 @@ const CodeGenSessions = () => {
             >
                 {sessions.length > 0 ? (
                     sessions.map((session) => (
-                        <Motion.div key={session.id} variants={item}>
+                        <Motion.div key={session.id || session.conversation_id} variants={item}>
                             <Link
                                 to={`/dashboard/codegen/session/${session.conversation_id}`}
                                 className="group p-5 rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-yellow-500/20 transition-all flex items-center gap-5 relative overflow-hidden"
@@ -121,8 +135,9 @@ const CodeGenSessions = () => {
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-4">
+                                        {/* FIX: Safe description truncation via helper */}
                                         <h4 className="font-bold text-gray-200 group-hover:text-yellow-500 transition-colors truncate">
-                                            {session.description.length > 30 ? session.description.substring(0, 30) + "..." : session.description || 'Neural Logic'}
+                                            {truncateDescription(session.description)}
                                         </h4>
                                         <span className="text-[10px] text-gray-600 whitespace-nowrap font-black uppercase tracking-tighter flex items-center gap-1">
                                             <FiClock size={10} />
