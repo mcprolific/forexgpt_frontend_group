@@ -24,6 +24,8 @@ import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   getCodeConversationHistory,
   generateCode as askArchitect,
+  // FIX: Moved improveStrategy to top-level import — no longer dynamically imported
+  improveStrategy,
 } from '../../../services/codeGenService';
 
 const CodeGeneration = () => {
@@ -183,8 +185,7 @@ const CodeGeneration = () => {
     setMessages((prev) => [...prev, userMsg]);
 
     try {
-      const { improveStrategy } = await import('../../../services/codeGenService');
-
+      // FIX: No longer dynamically imported — uses top-level import directly
       const response = await improveStrategy(
         user.id,
         originalCode,
@@ -318,7 +319,6 @@ const CodeGeneration = () => {
           <div className="px-4 py-3 bg-white/5 border-t border-white/5 flex gap-2">
             <button
               onClick={() => handleTestStrategy(code, isImproved ? 2 : 1)}
-              // FIX: Disable button if code is falsy
               disabled={!code}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -490,7 +490,6 @@ const CodeGeneration = () => {
                   </div>
                 )}
 
-                {/* FIX: Pass message.id into renderContent for copy feedback keying */}
                 {renderContent(message.content, message.code, message.isImproved, message.id || idx)}
 
                 <div
