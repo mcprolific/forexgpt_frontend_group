@@ -155,14 +155,10 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-<<<<<<< HEAD
-        setLatestGeneratedCode(response.code);
-        // Always append the assistant reply first so the user sees it,
-        // then update the URL if this was a brand-new conversation.
-=======
-        // FIX: Always add the assistant message to state regardless of new/existing conversation
->>>>>>> 142629e1bfd7fcd2ac0bae0503e262248f2a7f66
-        setMessages((prev) => [...prev, assistantMsg]);
+          setLatestGeneratedCode(response.code);
+          // Always append the assistant reply first so the user sees it,
+          // then update the URL if this was a brand-new conversation.
+          setMessages((prev) => [...prev, assistantMsg]);
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {

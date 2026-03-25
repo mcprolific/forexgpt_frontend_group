@@ -1,51 +1,8 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-
-// Layouts
-import DashboardLayout from './components/dashboard/layout/DashboardLayout';
-import MentorLayout from './components/dashboard/layout/MentorLayout';
-import CodeGenerationLayout from './components/dashboard/layout/CodeGenerationLayout';
-import BacktestLayout from './components/dashboard/layout/BacktestLayout';
-import SignalsLayout from './components/dashboard/layout/SignalsLayout';
-
-// Public Pages
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import WhyPage from './pages/WhyPage';
-import HowToUsePage from './pages/HowToUsePage';
-import ServicesPage from './pages/ServicesPage';
-import AboutOurStoryPage from './pages/AboutOurStoryPage';
-import AboutVisionValuesPage from './pages/AboutVisionValuesPage';
-import SecurityPrivacyPage from './pages/SecurityPrivacyPage';
-import HowAIHelpsPage from './pages/HowAIHelpsPage';
-import ContactSupportPage from './pages/ContactSupportPage';
-import TeamNamesPage from './pages/TeamNamesPage';
-import TranscriptPage from './pages/TranscriptPage';
-import StrategyLabPage from './pages/StrategyLabPage';
-import BacktestPage from './pages/BacktestPage';
-import MentorPage from './pages/MentorPage';
-import EmailConfirmedPage from './pages/EmailConfirmedPage';
-
-// Dashboard Pages
-import Dashboard from './pages/dashboard/Dashboard';
-import Profile from './pages/dashboard/Profile/Profile';
-import ProfileEdit from './pages/dashboard/Profile/ProfileEdit';
-import ActivityLog from './pages/dashboard/Activity/ActivityLog';
-import MentorConversations from './pages/dashboard/Mentor/MentorConversations';
-import MentorMessages from './pages/dashboard/Mentor/MentorMessages';
-import CodeGenSessions from './pages/dashboard/CodeGeneration/CodeGenSessions';
-import CodeGeneration from './pages/dashboard/CodeGeneration/CodeGeneration';
-import Backtests from './pages/dashboard/Backtests/Backtests';
-import BacktestTrades from './pages/dashboard/Backtests/BacktestTrades';
-import Signals from './pages/dashboard/Signals/Signals';
-import HistoryPage from './pages/dashboard/HistoryPage';
-import LearningPage from './pages/dashboard/LearningPage';
-import SettingsPage from './pages/dashboard/SettingsPage';
-import TranscriptDashboard from './pages/dashboard/Transcript/TranscriptDashboard';
-
 import ProtectedRoute from './layout/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
+import LoadingScreen from './components/ui/LoadingScreen';
 
 // ── Layouts (lazy) ────────────────────────────────────────────────────
 const DashboardLayout      = lazy(() => import('./components/dashboard/layout/DashboardLayout'));
@@ -112,7 +69,8 @@ function App() {
         }}
       />
       <Router>
-        <Routes>
+        <Suspense fallback={<LoadingScreen />}>
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -133,6 +91,7 @@ function App() {
           <Route path="/strategy" element={<StrategyLabPage />} />
 
           <Route path="/mentor" element={<MentorPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
             {/* Dashboard Routes (Protected) */}
             <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
