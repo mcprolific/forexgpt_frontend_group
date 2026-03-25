@@ -1,22 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import {
-  FiBarChart2, FiPlus, FiClock, FiChevronRight,
-  FiZap, FiRefreshCw, FiArrowLeft, FiTrash2
-} from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { FiArrowLeft, FiTrash2 } from 'react-icons/fi';
 import { useAuth } from '../../../contexts/AuthContext';
-import {
-  getBacktestResults,
-  getBacktestResult,
-  deleteBacktest
-} from '../../../services/backtestService';
+import { getBacktestResult, deleteBacktest } from '../../../services/backtestService';
 import BacktestForm from '../../../components/dashboard/backtest/BacktestForm';
 import BacktestResults from '../../../components/dashboard/backtest/BacktestResults';
 import toast from 'react-hot-toast';
-
-const GOLD = '#D4AF37';
-const GOLD_LIGHT = '#FFD700';
 
 /* ═══════════════════════════════════════════════════════════
    Backtests — index + result page
@@ -27,11 +16,22 @@ const Backtests = () => {
   const { user } = useAuth();
   const { backtestId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const userId = user?.user_id || user?.id;
 
   const [result, setResult] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const strategyCode = location.state?.customCode || location.state?.strategyCode || '';
+  const backtestAnalysis = result?.metrics
+    ? {
+        ...result.metrics,
+        sharpe_ratio: result.metrics.sharpe_ratio,
+        max_drawdown: result.metrics.max_drawdown_pct,
+        win_rate: result.metrics.win_rate_pct,
+        total_return: result.metrics.total_return_pct,
+      }
+    : null;
 
   /* ── load specific result when URL has :backtestId ── */
   useEffect(() => {
@@ -70,6 +70,42 @@ const Backtests = () => {
     }
   };
 
+  const handleUnderstandFailure = () => {
+    if (!result || !backtestAnalysis) return;
+
+    navigate('/dashboard/mentor/messages/new', {
+      state: {
+        mode: 'analyze',
+        strategyType: location.state?.strategyType || result.strategy_name || 'custom',
+        strategyCode,
+        results: backtestAnalysis,
+      },
+    });
+  };
+
+  const handleDownloadCode = () => {
+    if (!strategyCode) {
+      toast.error('No strategy code is available to download.');
+      return;
+    }
+
+    const blob = new Blob([strategyCode], { type: 'text/x-python' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `${(location.state?.strategyName || result?.strategy_name || 'strategy')
+      .toString()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50) || 'strategy'}.py`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const showingResult = !!backtestId && backtestId !== 'new';
 
   return (
@@ -105,7 +141,13 @@ const Backtests = () => {
               </button>
             </div>
 
-            <BacktestResults result={result} onDelete={handleDelete} />
+            <BacktestResults
+              result={result}
+              onDelete={handleDelete}
+              onAnalyze={handleUnderstandFailure}
+              onDownloadCode={handleDownloadCode}
+              canDownloadCode={Boolean(strategyCode)}
+            />
           </div>
         )}
 
