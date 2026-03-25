@@ -35,6 +35,16 @@ const sanitizeFileName = (value) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 50) || 'strategy';
 
+const formatSummaryPercent = (value) =>
+  value != null && value !== ''
+    ? `${Number(value).toFixed(2)}%`
+    : 'N/A';
+
+const formatSummaryMetric = (value, decimals = 2) =>
+  value != null && value !== ''
+    ? Number(value).toFixed(decimals)
+    : 'N/A';
+
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -181,10 +191,9 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-          setLatestGeneratedCode(response.code);
-          // Always append the assistant reply first so the user sees it,
-          // then update the URL if this was a brand-new conversation.
-          setMessages((prev) => [...prev, assistantMsg]);
+        // Always append the assistant reply first so the user sees it,
+        // then update the URL if this was a brand-new conversation.
+        setMessages((prev) => [...prev, assistantMsg]);
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
@@ -463,10 +472,29 @@ const CodeGeneration = () => {
               </p>
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: 'Sharpe', value: backtestResults.sharpe_ratio ?? 'N/A' },
-                  { label: 'Max DD', value: backtestResults.max_drawdown != null ? `${backtestResults.max_drawdown}%` : 'N/A' },
-                  { label: 'Win Rate', value: backtestResults.win_rate != null ? `${backtestResults.win_rate}%` : 'N/A' },
-                  { label: 'Return', value: backtestResults.total_return != null ? `${backtestResults.total_return}%` : 'N/A' },
+                  { label: 'Sharpe', value: formatSummaryMetric(backtestResults.sharpe_ratio) },
+                  {
+                    label: 'Max DD',
+                    value: formatSummaryPercent(
+                      backtestResults.max_drawdown ?? backtestResults.max_drawdown_pct
+                    ),
+                  },
+                  {
+                    label: 'Win Rate',
+                    value: formatSummaryPercent(
+                      backtestResults.win_rate ?? backtestResults.win_rate_pct
+                    ),
+                  },
+                  {
+                    label: 'Return',
+                    value: formatSummaryPercent(
+                      backtestResults.total_return ?? backtestResults.total_return_pct
+                    ),
+                  },
+                  {
+                    label: 'Expectancy',
+                    value: formatSummaryMetric(backtestResults.expectancy, 4),
+                  },
                 ].map((m) => (
                   <div key={m.label} className="bg-black/30 rounded-lg p-2 text-center">
                     <p className="text-[9px] text-gray-600 uppercase tracking-widest">{m.label}</p>

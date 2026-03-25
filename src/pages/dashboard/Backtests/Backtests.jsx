@@ -7,6 +7,82 @@ import BacktestForm from '../../../components/dashboard/backtest/BacktestForm';
 import BacktestResults from '../../../components/dashboard/backtest/BacktestResults';
 import toast from 'react-hot-toast';
 
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getWinRateRatio = (metrics = {}) => {
+  const rawWinRate = toNumber(metrics.win_rate);
+  if (rawWinRate != null) {
+    return rawWinRate > 1 ? rawWinRate / 100 : rawWinRate;
+  }
+
+  const rawWinRatePct = toNumber(metrics.win_rate_pct);
+  return rawWinRatePct != null ? rawWinRatePct / 100 : null;
+};
+
+const calculateExpectancy = (metrics = {}) => {
+  const winRate = getWinRateRatio(metrics);
+  const avgWin = toNumber(metrics.avg_win);
+  const avgLoss = toNumber(metrics.avg_loss);
+
+  if (winRate == null || avgWin == null || avgLoss == null) {
+    return null;
+  }
+
+  return (winRate * avgWin) + ((1 - winRate) * avgLoss);
+};
+
+const classifyPerformance = (metrics = {}, expectancy = null) => {
+  const sharpeRatio = toNumber(metrics.sharpe_ratio);
+  const sortinoRatio = toNumber(metrics.sortino_ratio);
+  const maxDrawdownPct = Math.abs(toNumber(metrics.max_drawdown_pct) ?? toNumber(metrics.max_drawdown) ?? 0);
+  const profitFactor = toNumber(metrics.profit_factor);
+  const totalTrades = toNumber(metrics.total_trades) ?? 0;
+
+  const isCriticalFailure =
+    (profitFactor != null && profitFactor < 1.0) ||
+    maxDrawdownPct > 30 ||
+    (expectancy != null && expectancy < 0);
+
+  if (isCriticalFailure) {
+    return 'critical';
+  }
+
+  const isPoorPerformance =
+    (sharpeRatio != null && sharpeRatio < 0.5) ||
+    maxDrawdownPct > 20 ||
+    (profitFactor != null && profitFactor < 1.2) ||
+    totalTrades < 20;
+
+  if (isPoorPerformance) {
+    return 'poor';
+  }
+
+  const isAcceptablePerformance =
+    sharpeRatio != null &&
+    sharpeRatio >= 0.5 &&
+    sharpeRatio < 1.0 &&
+    maxDrawdownPct <= 20 &&
+    (profitFactor == null || profitFactor >= 1.2) &&
+    totalTrades >= 20;
+
+  if (isAcceptablePerformance) {
+    return 'acceptable';
+  }
+
+  const isGoodPerformance =
+    (sharpeRatio == null || sharpeRatio >= 1.0) &&
+    (sortinoRatio == null || sortinoRatio >= 1.0) &&
+    maxDrawdownPct <= 15 &&
+    (profitFactor == null || profitFactor >= 1.3) &&
+    totalTrades >= 20 &&
+    (expectancy == null || expectancy > 0);
+
+  return isGoodPerformance ? 'good' : 'acceptable';
+};
+
 /* ═══════════════════════════════════════════════════════════
    Backtests — index + result page
    Route: /dashboard/backtest          → shows form + sidebar
@@ -23,13 +99,32 @@ const Backtests = () => {
   const [result, setResult] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const strategyCode = location.state?.customCode || location.state?.strategyCode || '';
-  const backtestAnalysis = result?.metrics
+  const expectancy = result?.metrics ? calculateExpectancy(result.metrics) : null;
+  const performanceVerdict = result?.metrics ? classifyPerformance(result.metrics, expectancy) : null;
+  const metricsForMentor = result?.metrics
     ? {
-        ...result.metrics,
-        sharpe_ratio: result.metrics.sharpe_ratio,
-        max_drawdown: result.metrics.max_drawdown_pct,
-        win_rate: result.metrics.win_rate_pct,
-        total_return: result.metrics.total_return_pct,
+        strategy_name: location.state?.strategyType || result.strategy_name || 'custom',
+        pair: result.pair || result.metrics.pair || null,
+        start_date: result.start_date || result.metrics.start_date || null,
+        end_date: result.end_date || result.metrics.end_date || null,
+        total_return_pct: result.metrics.total_return_pct ?? null,
+        total_return: result.metrics.total_return_pct ?? null,
+        cagr_pct: result.metrics.cagr_pct ?? null,
+        sharpe_ratio: result.metrics.sharpe_ratio ?? null,
+        sortino_ratio: result.metrics.sortino_ratio ?? null,
+        calmar_ratio: result.metrics.calmar_ratio ?? null,
+        max_drawdown_pct: result.metrics.max_drawdown_pct ?? null,
+        max_drawdown: result.metrics.max_drawdown_pct ?? null,
+        total_trades: result.metrics.total_trades ?? null,
+        win_rate_pct: result.metrics.win_rate_pct ?? null,
+        win_rate: result.metrics.win_rate_pct ?? null,
+        profit_factor: result.metrics.profit_factor ?? null,
+        avg_win: result.metrics.avg_win ?? null,
+        avg_loss: result.metrics.avg_loss ?? null,
+        avg_risk_reward: result.metrics.avg_risk_reward ?? null,
+        avg_holding_days: result.metrics.avg_holding_days ?? null,
+        expectancy,
+        custom_code: strategyCode || null,
       }
     : null;
 
@@ -71,14 +166,30 @@ const Backtests = () => {
   };
 
   const handleUnderstandFailure = () => {
-    if (!result || !backtestAnalysis) return;
+    if (!result || !metricsForMentor) return;
 
     navigate('/dashboard/mentor/messages/new', {
       state: {
         mode: 'analyze',
-        strategyType: location.state?.strategyType || result.strategy_name || 'custom',
+        strategyType: metricsForMentor.strategy_name,
         strategyCode,
-        results: backtestAnalysis,
+        results: metricsForMentor,
+        metricsForMentor,
+      },
+    });
+  };
+
+  const handleNeedsImprovement = () => {
+    if (!result || !metricsForMentor) return;
+
+    navigate('/dashboard/mentor/messages/new', {
+      state: {
+        mode: 'analyze',
+        strategyType: metricsForMentor.strategy_name,
+        strategyCode,
+        results: metricsForMentor,
+        metricsForMentor,
+        skipToImprovement: true,
       },
     });
   };
@@ -145,8 +256,11 @@ const Backtests = () => {
               result={result}
               onDelete={handleDelete}
               onAnalyze={handleUnderstandFailure}
+              onNeedsImprovement={handleNeedsImprovement}
               onDownloadCode={handleDownloadCode}
               canDownloadCode={Boolean(strategyCode)}
+              performanceVerdict={performanceVerdict}
+              expectancy={expectancy}
             />
           </div>
         )}
