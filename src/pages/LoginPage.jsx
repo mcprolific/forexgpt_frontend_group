@@ -75,13 +75,8 @@ const LoginPage = () => {
       const msg = typeof err === "string" ? err : "";
       if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || (/email/i.test(msg) && /confirm/i.test(msg))) {
         setFormError("Email not verified. Please check your inbox and confirm your account before signing in.");
-      } else if (
-        /invalid|incorrect|wrong|bad credential|password|email.*not.*found|user.*not.*found|no.*user|not.*exist/i.test(msg) ||
-        !msg
-      ) {
-        setFormError("Invalid login details. Please check your email and password and try again.");
       } else {
-        setFormError(msg);
+        setFormError("Invalid login details. Please check your email and password and try again.");
       }
     }
   };

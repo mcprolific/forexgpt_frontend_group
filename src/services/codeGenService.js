@@ -20,7 +20,7 @@ export const generateCode = async (message, conversationId = null, userId = null
             previous_code: previousCode,
             error_message: errorMessage
         },
-        { timeout: 30000 }
+        { timeout: 120000 } // 2 min — AI generation can take 30–90s
     );
     return res.data;
 };
@@ -72,6 +72,6 @@ export const improveStrategy = async (
     mentor_analysis: mentorAnalysis,
     additional_requirements: additionalRequirements,
     conversation_id: conversationId,
-  });
+  }, { timeout: 120000 }); // 2 min — AI improvement can take 30–90s
   return res.data;
 };
