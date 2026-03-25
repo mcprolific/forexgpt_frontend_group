@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import ConfidenceBar from "../components/signals/ConfidenceBar";
 import ReasoningPanel from "../components/signals/ReasoningPanel";
 import SignalResultCard from "../components/signals/SignalResultCard";
@@ -7,6 +7,7 @@ import useDebounce from "../hooks/useDebounce";
 const SignalAnalysisPage = () => {
   const [symbol, setSymbol] = useState("EURUSD");
   const [text, setText] = useState("");
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const debounced = useDebounce(text, 400);
 
   const direction = useMemo(() => {
@@ -20,6 +21,17 @@ const SignalAnalysisPage = () => {
     const len = Math.min(100, debounced.length);
     return Math.max(0.3, len / 100); // 0.3–1
   }, [debounced]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const points = useMemo(() => {
     const out = [];
@@ -53,12 +65,15 @@ const SignalAnalysisPage = () => {
         <ConfidenceBar value={confidence} />
       </div>
 
+      <div className={`text-xs font-bold uppercase tracking-widest py-2 px-3 mb-3 rounded ${isOnline ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
+        {isOnline ? "Online – Signal services available" : "Offline – Network connectivity required"}
+      </div>
+
       <SignalResultCard
         symbol={symbol}
         direction={direction}
         confidence={confidence}
         rationale={`Signal inferred from text analysis (${direction}).`}
-        signalDetected={true}
       />
       <ReasoningPanel points={points} />
     </div>

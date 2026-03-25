@@ -9,6 +9,9 @@ export const loginAPI = async (payload) => {
   const d = res.data || {};
   const token = d?.tokens?.access_token || null;
   const user = d?.user || null;
+  if (!token || !user) {
+    throw new Error(d?.detail || "Invalid login credentials");
+  }
   return { token, user };
 };
 

@@ -24,6 +24,8 @@ import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   getCodeConversationHistory,
   generateCode as askArchitect,
+  // FIX: Moved improveStrategy to top-level import — no longer dynamically imported
+  improveStrategy,
 } from '../../../services/codeGenService';
 
 const CodeGeneration = () => {
@@ -46,8 +48,10 @@ const CodeGeneration = () => {
   const [showBacktestSummary, setShowBacktestSummary] = useState(true);
 
   // ── Latest generated code (for Test Strategy button) ──────
-  const [latestGeneratedCode, setLatestGeneratedCode] = useState(null);
   const [latestStrategyDesc, setLatestStrategyDesc] = useState('');
+
+  // ── Copy feedback state ────────────────────────────────────
+  const [copiedId, setCopiedId] = useState(null);
 
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
@@ -56,16 +60,20 @@ const CodeGeneration = () => {
   useEffect(() => {
     const state = location.state || {};
 
-    // Coming from Mentor with pre-filled strategy context
     if (state.fromMentor) {
       const strategyType = state.strategyType || '';
-      const context = state.context || '';
-      setNewMessage(
-        `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
-      );
+      const context = state.context || state.strategyText || '';
+      const mentorPrompt = strategyType
+        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
+        : context
+          ? `Create a trading strategy based on: ${context}`
+          : '';
+
+      if (mentorPrompt) {
+        setNewMessage(mentorPrompt);
+      }
     }
 
-    // Coming from Mentor with improvement request
     if (state.mode === 'improve') {
       setImprovementMode(true);
       setOriginalCode(state.originalCode || null);
@@ -89,14 +97,7 @@ const CodeGeneration = () => {
       }
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
-        const history = Array.isArray(res?.history)
-          ? res.history
-          : Array.isArray(res?.messages)
-            ? res.messages
-            : Array.isArray(res)
-              ? res
-              : [];
-        setMessages(history);
+        setMessages(res.history || []);
       } catch (error) {
         console.error('Error fetching logic history:', error);
       } finally {
@@ -112,6 +113,13 @@ const CodeGeneration = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // ── Copy to clipboard with feedback ───────────────────────
+  const handleCopy = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   // ── Send message (initial generation) ─────────────────────
   const handleSendMessage = async () => {
@@ -142,13 +150,18 @@ const CodeGeneration = () => {
           id: response.code_id || Date.now().toString() + '-assistant',
           role: 'assistant',
           content: response.explanation,
-          code: response.code,
+          // FIX: Safely fallback if code is missing
+          code: response.code || null,
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
+<<<<<<< HEAD
         setLatestGeneratedCode(response.code);
         // Always append the assistant reply first so the user sees it,
         // then update the URL if this was a brand-new conversation.
+=======
+        // FIX: Always add the assistant message to state regardless of new/existing conversation
+>>>>>>> 142629e1bfd7fcd2ac0bae0503e262248f2a7f66
         setMessages((prev) => [...prev, assistantMsg]);
 
         if (conversationId === 'new') {
@@ -204,8 +217,7 @@ const CodeGeneration = () => {
     setMessages((prev) => [...prev, userMsg]);
 
     try {
-      const { improveStrategy } = await import('../../../services/codeGenService');
-
+      // FIX: No longer dynamically imported — uses top-level import directly
       const response = await improveStrategy(
         user.id,
         originalCode,
@@ -220,20 +232,21 @@ const CodeGeneration = () => {
           id: response.code_id || Date.now().toString() + '-improved',
           role: 'assistant',
           content: response.explanation,
-          code: response.code,
+          // FIX: Safely fallback if code is missing
+          code: response.code || null,
           timestamp: response.timestamp || new Date().toISOString(),
           isImproved: true,
         };
 
-        setLatestGeneratedCode(response.code);
         setImprovementMode(false);
+
+        // FIX: Always add assistant message before navigating
+        setMessages((prev) => [...prev, assistantMsg]);
 
         if (conversationId === 'new' && response.conversation_id) {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
           });
-        } else {
-          setMessages((prev) => [...prev, assistantMsg]);
         }
       }
     } catch (error) {
@@ -243,8 +256,14 @@ const CodeGeneration = () => {
       setSending(false);
     }
   };
+
   // ── Navigate to Backtest with generated code ───────────────
   const handleTestStrategy = (code, version = 1) => {
+    // FIX: Guard against missing code before navigating
+    if (!code) {
+      console.error('No code available to test');
+      return;
+    }
     navigate('/backtest', {
       state: {
         mode: 'custom',
@@ -257,7 +276,7 @@ const CodeGeneration = () => {
   };
 
   // ── Render message content ─────────────────────────────────
-  const renderContent = (content, code, isImproved = false) => (
+  const renderContent = (content, code, isImproved = false, messageId) => (
     <div className="space-y-4">
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
@@ -290,7 +309,7 @@ const CodeGeneration = () => {
         </ReactMarkdown>
       </div>
 
-      {/* Code block */}
+      {/* Code block — only render if code exists */}
       {code && (
         <div className="rounded-xl overflow-hidden bg-[#0d0d0d] border border-white/10 group shadow-2xl">
           <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between">
@@ -302,11 +321,13 @@ const CodeGeneration = () => {
               </span>
             </div>
             <button
-              onClick={() => navigator.clipboard.writeText(code)}
+              onClick={() => handleCopy(code, `copy-${messageId}`)}
               className="p-1.5 hover:text-yellow-500 transition-colors text-gray-500 flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
             >
               <FiCopy size={12} />
-              <span className="text-[8px] font-black uppercase tracking-tighter">Copy</span>
+              <span className="text-[8px] font-black uppercase tracking-tighter">
+                {copiedId === `copy-${messageId}` ? 'Copied!' : 'Copy'}
+              </span>
             </button>
           </div>
           <SyntaxHighlighter
@@ -329,19 +350,28 @@ const CodeGeneration = () => {
           <div className="px-4 py-3 bg-white/5 border-t border-white/5 flex gap-2">
             <button
               onClick={() => handleTestStrategy(code, isImproved ? 2 : 1)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all"
+              disabled={!code}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FiPlay size={12} />
               {isImproved ? 'Test Improved Strategy' : 'Test Strategy'}
             </button>
             <button
-              onClick={() => navigator.clipboard.writeText(code)}
+              onClick={() => handleCopy(code, `dl-${messageId}`)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
             >
               <FiDownload size={12} />
-              Copy Code
+              {copiedId === `dl-${messageId}` ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* FIX: Show warning if assistant responded but no code was returned */}
+      {!code && content && (
+        <div className="flex items-center gap-2 text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-2">
+          <FiAlertCircle size={12} />
+          No code was returned for this response.
         </div>
       )}
     </div>
@@ -491,7 +521,7 @@ const CodeGeneration = () => {
                   </div>
                 )}
 
-                {renderContent(message.content, message.code, message.isImproved)}
+                {renderContent(message.content, message.code, message.isImproved, message.id || idx)}
 
                 <div
                   className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter

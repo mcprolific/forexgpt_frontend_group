@@ -74,34 +74,19 @@ const Backtests = () => {
 
   return (
     <div className="flex-1 min-w-0">
-      <AnimatePresence mode="wait">
-
         {/* Detail Loading */}
         {detailLoading && (
-          <Motion.div
-            key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-col items-center justify-center py-40 text-center"
-          >
+          <div className="flex flex-col items-center justify-center py-40 text-center">
             <div className="h-14 w-14 border-4 border-yellow-500/10 border-t-yellow-500 rounded-full animate-spin mb-6" />
             <p className="text-xs font-black text-gray-500 uppercase tracking-widest">
               Loading simulation…
             </p>
-          </Motion.div>
+          </div>
         )}
 
         {/* Results Page */}
         {!detailLoading && showingResult && result && (
-          <Motion.div
-            key={backtestId}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.22 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             {/* Action Bar */}
             <div className="flex items-center justify-between mb-2">
               <Link
@@ -121,23 +106,15 @@ const Backtests = () => {
             </div>
 
             <BacktestResults result={result} onDelete={handleDelete} />
-          </Motion.div>
+          </div>
         )}
 
         {/* Form (index or /new) */}
         {!detailLoading && (!showingResult || backtestId === 'new') && (
-          <Motion.div
-            key="form"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.22 }}
-          >
+          <div>
             <BacktestForm />
-          </Motion.div>
+          </div>
         )}
-
-      </AnimatePresence>
     </div>
   );
 };

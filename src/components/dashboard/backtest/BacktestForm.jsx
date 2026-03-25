@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { FiPlay, FiAlertCircle, FiLoader } from 'react-icons/fi';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { FiPlay, FiAlertCircle, FiLoader, FiCode } from 'react-icons/fi';
 import { useAuth } from '../../../contexts/AuthContext';
-import { runBacktest } from '../../../services/backtestService';
+import { runBacktest, runCustomBacktest } from '../../../services/backtestService';
 import toast from 'react-hot-toast';
 
 const GOLD = '#D4AF37';
@@ -30,10 +30,16 @@ const selectCls =
 const BacktestForm = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    const [customCode, setCustomCode] = useState('');
+    const [showCodePreview, setShowCodePreview] = useState(false);
+
+
 
     const [form, setForm] = useState({
         pair: 'EURUSD',
-        strategy_name: 'bollinger_bands',
+        strategy_name: 'sma',
         strategy_id: '',
         start_date: '2021-01-01',
         end_date: '2023-12-29',
@@ -63,18 +69,29 @@ const BacktestForm = () => {
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+    const selectedStrategy = form?.strategy_name || 'sma';
+    const setSelectedStrategy = (val) => set('strategy_name', val);
+
+    useEffect(() => {
+      if (location.state?.mode === 'custom' && location.state?.customCode) {
+        setSelectedStrategy('custom');
+        setCustomCode(location.state.customCode);
+        setShowCodePreview(true);
+      }
+    }, [location.state, location.state?.mode, location.state?.customCode]);
+
     /* ── build payload ── */
     const payload = () => {
         let strategy_params = {};
         const { strategy_name } = form;
 
-        if (strategy_name === 'bollinger_bands') {
+        if (strategy_name === 'rsi') {
             strategy_params = { period: Number(form.period), oversold: Number(form.oversold), overbought: Number(form.overbought) };
-        } else if (strategy_name === 'rsi_divergence') {
+        } else if (strategy_name === 'macd') {
             strategy_params = { fast: Number(form.fast), slow: Number(form.slow), signal: Number(form.macd_signal) };
-        } else if (strategy_name === 'moving_average_cross') {
+        } else if (strategy_name === 'bollinger') {
             strategy_params = { period: Number(form.bb_period), std_dev: Number(form.std_dev) };
-        } else if (strategy_name === 'macro_arbitrage') {
+        } else if (strategy_name === 'sma') {
             strategy_params = { fast_period: Number(form.fast_period), slow_period: Number(form.slow_period) };
         }
 
@@ -104,13 +121,33 @@ const BacktestForm = () => {
             setError('Start date must be before end date.'); return;
         }
 
+        if (form.strategy_name === 'custom' && !customCode) {
+            setError('Please load custom code before running backtest.'); return;
+        }
+
         try {
             setLoading(true);
             const userId = user?.user_id || user?.id;
-            const result = await runBacktest(userId, payload());
+            let result;
+
+            if (form.strategy_name === 'custom') {
+                const customPayload = {
+                    user_id: String(userId),
+                    custom_code: customCode,
+                    currency_pair: form.pair,
+                    start_date: form.start_date,
+                    end_date: form.end_date,
+                    capital: Number(form.initial_capital),
+                    position_size: Number(form.position_size_pct * form.initial_capital)
+                };
+                result = await runCustomBacktest(customPayload);
+            } else {
+                result = await runBacktest(userId, payload());
+            }
+
             toast.success('Simulation complete!');
-            // Navigate to dedicated results page
-            navigate(`/dashboard/backtest/${result.id}`);
+            // Navigate to dedicated results page, pass customCode for analysis mapping
+            navigate(`/dashboard/backtest/${result.id}`, { state: { customCode: form.strategy_name === 'custom' ? customCode : undefined } });
         } catch (err) {
             const msg = err?.response?.data?.detail || 'Backtest failed. Please check your inputs.';
             setError(msg);
@@ -199,16 +236,19 @@ const BacktestForm = () => {
 
                     <div>
                         <Label htmlFor="strategy_name">Strategy</Label>
-                        <select
+                        <select 
                             id="strategy_name"
-                            value={form.strategy_name}
-                            onChange={e => set('strategy_name', e.target.value)}
+                            value={selectedStrategy} 
+                            onChange={(e) => setSelectedStrategy(e.target.value)}
                             className={selectCls}
                         >
-                            <option value="bollinger_bands">RSI</option>
-                            <option value="rsi_divergence">MACD</option>
-                            <option value="moving_average_cross">Bollinger Bands</option>
-                            <option value="macro_arbitrage">Average Crossover Strategy</option>
+                          <option value="sma">SMA Crossover (Built-in)</option>
+                          <option value="rsi">RSI Mean Reversion (Built-in)</option>
+                          <option value="macd">MACD Strategy (Built-in)</option>
+                          <option value="bollinger">Bollinger Bands (Built-in)</option>
+                          {(location.state?.mode === 'custom' || !!customCode) && (
+                            <option value="custom">Custom Strategy</option>
+                          )}
                         </select>
                     </div>
                 </div>
@@ -309,7 +349,7 @@ const BacktestForm = () => {
                         Strategy Parameters
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        {form.strategy_name === 'bollinger_bands' && (
+                        {form.strategy_name === 'rsi' && (
                             <>
                                 <div>
                                     <Label htmlFor="period">RSI Period</Label>
@@ -326,7 +366,7 @@ const BacktestForm = () => {
                             </>
                         )}
 
-                        {form.strategy_name === 'rsi_divergence' && (
+                        {form.strategy_name === 'macd' && (
                             <>
                                 <div>
                                     <Label htmlFor="fast">Fast EMA (12)</Label>
@@ -343,7 +383,7 @@ const BacktestForm = () => {
                             </>
                         )}
 
-                        {form.strategy_name === 'moving_average_cross' && (
+                        {form.strategy_name === 'bollinger' && (
                             <>
                                 <div>
                                     <Label htmlFor="bb_period">BB Period (20)</Label>
@@ -356,7 +396,7 @@ const BacktestForm = () => {
                             </>
                         )}
 
-                        {form.strategy_name === 'macro_arbitrage' && (
+                        {form.strategy_name === 'sma' && (
                             <>
                                 <div>
                                     <Label htmlFor="fast_period">Fast Period (50)</Label>
@@ -406,6 +446,46 @@ const BacktestForm = () => {
 
                 {/* ── Divider ───────────────────────────────────────────── */}
                 <div className="border-t border-white/5" />
+
+                {/* ── Custom Strategy Handling ─────────────────────────────────────────────── */}
+                {selectedStrategy === 'custom' && !customCode && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden mb-6 p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-red-400">
+                        <FiAlertCircle className="w-5 h-5 flex-shrink-0" />
+                        <div className="text-sm">Cannot run Custom Strategy: No code loaded.</div>
+                    </div>
+                    <button 
+                        type="button" 
+                        onClick={() => navigate('/mentor')} 
+                        className="text-xs font-bold px-4 py-2 bg-yellow-500/10 text-yellow-500 rounded-lg hover:bg-yellow-500 hover:text-black transition-colors"
+                    >
+                        Go to CodeGen
+                    </button>
+                  </div>
+                )}
+
+                {selectedStrategy === 'custom' && customCode && (
+                  <div className="code-preview bg-white/5 border border-white/10 rounded-2xl overflow-hidden mb-6 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-green-400">
+                            <FiCode className="w-4 h-4" />
+                            <h3 className="text-[11px] font-bold uppercase tracking-widest m-0">✓ Custom Code Loaded</h3>
+                        </div>
+                        <button 
+                            type="button"
+                            onClick={() => setShowCodePreview(!showCodePreview)}
+                            className="text-[10px] font-black uppercase text-gray-400 hover:text-white pb-1 border-b border-gray-600 hover:border-white transition-colors"
+                        >
+                          {showCodePreview ? 'Hide Code' : 'Show Code'}
+                        </button>
+                    </div>
+                    {showCodePreview && (
+                        <pre className="bg-[#0D0D0D] p-4 rounded-xl text-[11px] text-gray-400 overflow-x-auto whitespace-pre-wrap border border-white/5 font-mono leading-relaxed mt-2 max-h-64 overflow-y-auto w-full">
+                            <code>{customCode}</code>
+                        </pre>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Error ─────────────────────────────────────────────── */}
                 <AnimatePresence>

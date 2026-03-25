@@ -6,6 +6,12 @@ export const runBacktest = async (userId, payload) => {
     return res.data;
 };
 
+export const runCustomBacktest = async (payload) => {
+    const res = await axiosInstance.post("/backtest/run/custom", payload);
+    return res.data;
+};
+
+
 export const getBacktestResults = async (userId, limit = 20, offset = 0) => {
     const res = await axiosInstance.get(`/backtest/user/${userId}`, {
         params: { limit, offset }
