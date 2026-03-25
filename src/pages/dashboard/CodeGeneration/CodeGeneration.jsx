@@ -89,6 +89,12 @@ const CodeGeneration = () => {
         setLoading(false);
         return;
       }
+      // Skip re-fetch when we just navigated here from a new conversation
+      // (messages are already in state from the send flow)
+      if (location.state?.skipFetch) {
+        setLoading(false);
+        return;
+      }
       try {
         const res = await getCodeConversationHistory(conversationId, user.id);
         setMessages(res.history || []);
@@ -149,18 +155,48 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
+<<<<<<< HEAD
+        setLatestGeneratedCode(response.code);
+        // Always append the assistant reply first so the user sees it,
+        // then update the URL if this was a brand-new conversation.
+=======
         // FIX: Always add the assistant message to state regardless of new/existing conversation
+>>>>>>> 142629e1bfd7fcd2ac0bae0503e262248f2a7f66
         setMessages((prev) => [...prev, assistantMsg]);
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
+            state: { skipFetch: true },
           });
         }
+      } else {
+        // Response came back but was missing expected fields
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString() + '-error',
+            role: 'assistant',
+            content: 'The server returned an unexpected response. Please try again.',
+            timestamp: new Date().toISOString(),
+          },
+        ]);
       }
     } catch (error) {
       console.error('Error generating logic:', error);
-      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      const errMsg =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to generate code. Please try again.';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString() + '-error',
+          role: 'assistant',
+          content: `Error: ${errMsg}`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
     } finally {
       setSending(false);
     }
@@ -350,7 +386,7 @@ const CodeGeneration = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
+    <div className="flex flex-col h-full bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
 
       {/* Header */}
       <div className="bg-white/[0.02] border-b border-white/5 p-5">

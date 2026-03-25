@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Layouts
@@ -47,6 +47,50 @@ import TranscriptDashboard from './pages/dashboard/Transcript/TranscriptDashboar
 import ProtectedRoute from './layout/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
 
+// ── Layouts (lazy) ────────────────────────────────────────────────────
+const DashboardLayout      = lazy(() => import('./components/dashboard/layout/DashboardLayout'));
+const MentorLayout         = lazy(() => import('./components/dashboard/layout/MentorLayout'));
+const CodeGenerationLayout = lazy(() => import('./components/dashboard/layout/CodeGenerationLayout'));
+const BacktestLayout       = lazy(() => import('./components/dashboard/layout/BacktestLayout'));
+const SignalsLayout        = lazy(() => import('./components/dashboard/layout/SignalsLayout'));
+
+// ── Public Pages (lazy) ───────────────────────────────────────────────
+const HomePage              = lazy(() => import('./pages/HomePage'));
+const LoginPage             = lazy(() => import('./pages/LoginPage'));
+const RegisterPage          = lazy(() => import('./pages/RegisterPage'));
+const EmailConfirmedPage    = lazy(() => import('./pages/EmailConfirmedPage'));
+const VerifyEmailPage       = lazy(() => import('./pages/VerifyEmailPage'));
+const WhyPage               = lazy(() => import('./pages/WhyPage'));
+const HowToUsePage          = lazy(() => import('./pages/HowToUsePage'));
+const ServicesPage          = lazy(() => import('./pages/ServicesPage'));
+const AboutOurStoryPage     = lazy(() => import('./pages/AboutOurStoryPage'));
+const AboutVisionValuesPage = lazy(() => import('./pages/AboutVisionValuesPage'));
+const SecurityPrivacyPage   = lazy(() => import('./pages/SecurityPrivacyPage'));
+const HowAIHelpsPage        = lazy(() => import('./pages/HowAIHelpsPage'));
+const ContactSupportPage    = lazy(() => import('./pages/ContactSupportPage'));
+const TeamNamesPage         = lazy(() => import('./pages/TeamNamesPage'));
+const TranscriptPage        = lazy(() => import('./pages/TranscriptPage'));
+const StrategyLabPage       = lazy(() => import('./pages/StrategyLabPage'));
+const BacktestPage          = lazy(() => import('./pages/BacktestPage'));
+const MentorPage            = lazy(() => import('./pages/MentorPage'));
+
+// ── Dashboard Pages (lazy) ────────────────────────────────────────────
+const Dashboard           = lazy(() => import('./pages/dashboard/Dashboard'));
+const Profile             = lazy(() => import('./pages/dashboard/Profile/Profile'));
+const ProfileEdit         = lazy(() => import('./pages/dashboard/Profile/ProfileEdit'));
+const ActivityLog         = lazy(() => import('./pages/dashboard/Activity/ActivityLog'));
+const MentorConversations = lazy(() => import('./pages/dashboard/Mentor/MentorConversations'));
+const MentorMessages      = lazy(() => import('./pages/dashboard/Mentor/MentorMessages'));
+const CodeGenSessions     = lazy(() => import('./pages/dashboard/CodeGeneration/CodeGenSessions'));
+const CodeGeneration      = lazy(() => import('./pages/dashboard/CodeGeneration/CodeGeneration'));
+const Backtests           = lazy(() => import('./pages/dashboard/Backtests/Backtests'));
+const BacktestTrades      = lazy(() => import('./pages/dashboard/Backtests/BacktestTrades'));
+const Signals             = lazy(() => import('./pages/dashboard/Signals/Signals'));
+const HistoryPage         = lazy(() => import('./pages/dashboard/HistoryPage'));
+const LearningPage        = lazy(() => import('./pages/dashboard/LearningPage'));
+const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'));
+const TranscriptDashboard = lazy(() => import('./pages/dashboard/Transcript/TranscriptDashboard'));
+
 function App() {
   return (
     <>
@@ -90,52 +134,51 @@ function App() {
 
           <Route path="/mentor" element={<MentorPage />} />
 
-          {/* Dashboard Routes (Protected) */}
-          <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/activity" element={<ActivityLog />} />
-            <Route path="/dashboard/profile" element={<Profile />} />
-            <Route path="/dashboard/profile/edit" element={<ProfileEdit />} />
-            <Route path="/dashboard/transcript" element={<TranscriptDashboard />} />
-            <Route path="/dashboard/learning" element={<LearningPage />} />
-            <Route path="/dashboard/history" element={<HistoryPage />} />
-            <Route path="/dashboard/settings" element={<SettingsPage />} />
+            {/* Dashboard Routes (Protected) */}
+            <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/activity" element={<ActivityLog />} />
+              <Route path="/dashboard/profile" element={<Profile />} />
+              <Route path="/dashboard/profile/edit" element={<ProfileEdit />} />
+              <Route path="/dashboard/transcript" element={<TranscriptDashboard />} />
+              <Route path="/dashboard/learning" element={<LearningPage />} />
+              <Route path="/dashboard/history" element={<HistoryPage />} />
+              <Route path="/dashboard/settings" element={<SettingsPage />} />
 
-            {/* Mentor App Routes */}
-            <Route path="/dashboard/mentor" element={<MentorLayout />}>
-              <Route index element={<Navigate to="conversations" replace />} />
-              <Route path="conversations" element={<MentorConversations />} />
-              <Route path="messages/:conversationId" element={<MentorMessages />} />
+              {/* Mentor App Routes */}
+              <Route path="/dashboard/mentor" element={<MentorLayout />}>
+                <Route index element={<Navigate to="conversations" replace />} />
+                <Route path="conversations" element={<MentorConversations />} />
+                <Route path="messages/:conversationId" element={<MentorMessages />} />
+              </Route>
+
+              {/* Backtests Routes */}
+              <Route path="/dashboard/backtest" element={<BacktestLayout />}>
+                <Route index element={<Backtests />} />
+                <Route path=":backtestId" element={<Backtests />} />
+                <Route path=":backtestId/trades" element={<BacktestTrades />} />
+                <Route path="new" element={<Backtests />} />
+              </Route>
+
+              {/* CodeGen Lab Routes */}
+              <Route path="/dashboard/codegen" element={<CodeGenerationLayout />}>
+                <Route index element={<Navigate to="sessions" replace />} />
+                <Route path="sessions" element={<CodeGenSessions />} />
+                <Route path="session/:conversationId" element={<CodeGeneration />} />
+              </Route>
+
+              {/* Signals Routes */}
+              <Route path="/dashboard/signals" element={<SignalsLayout />}>
+                <Route index element={<Signals />} />
+                <Route path=":signalId" element={<Signals />} />
+                <Route path="new" element={<Signals />} />
+              </Route>
             </Route>
 
-            {/* Backtests Routes */}
-            <Route path="/dashboard/backtest" element={<BacktestLayout />}>
-              <Route index element={<Backtests />} />
-              <Route path=":backtestId" element={<Backtests />} />
-              <Route path=":backtestId/trades" element={<BacktestTrades />} />
-              <Route path="new" element={<Backtests />} />
-            </Route>
-
-
-
-            {/* CodeGen Lab (Code Generation) Routes */}
-            <Route path="/dashboard/codegen" element={<CodeGenerationLayout />}>
-              <Route index element={<Navigate to="sessions" replace />} />
-              <Route path="sessions" element={<CodeGenSessions />} />
-              <Route path="session/:conversationId" element={<CodeGeneration />} />
-            </Route>
-
-            {/* Signals Routes */}
-            <Route path="/dashboard/signals" element={<SignalsLayout />}>
-              <Route index element={<Signals />} />
-              <Route path=":signalId" element={<Signals />} />
-              <Route path="new" element={<Signals />} />
-            </Route>
-          </Route>
-
-          {/* Catch-all Redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Catch-all Redirect */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </Router>
     </>
   );

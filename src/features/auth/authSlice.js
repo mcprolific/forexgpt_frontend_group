@@ -25,7 +25,12 @@ export const login = createAsyncThunk(
       const data = await loginAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Login failed");
+      return rejectWithValue(
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "Login failed"
+      );
     }
   }
 );

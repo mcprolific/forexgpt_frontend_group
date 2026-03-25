@@ -1,7 +1,11 @@
 import axiosInstance from "../../services/axiosInstance";
 
 export const loginAPI = async (payload) => {
-  const res = await axiosInstance.post("/login", payload);
+  const body = {
+    ...payload,
+    username: payload?.username || payload?.email || undefined,
+  };
+  const res = await axiosInstance.post("/login", body);
   const d = res.data || {};
   const token = d?.tokens?.access_token || null;
   const user = d?.user || null;

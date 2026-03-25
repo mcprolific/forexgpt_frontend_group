@@ -4,5 +4,20 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(),],
+  plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          motion: ['framer-motion'],
+          charts: ['recharts', 'lightweight-charts'],
+          markdown: ['react-markdown', 'react-syntax-highlighter'],
+          icons: ['react-icons', '@heroicons/react'],
+          utils: ['axios', 'react-hot-toast'],
+          xlsx: ['xlsx', 'jspdf', 'jspdf-autotable'],
+        },
+      },
+    },
+  },
 })
