@@ -19,7 +19,7 @@ import LoadingScreen from "../components/ui/LoadingScreen";
 const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading } = useSelector((state) => state.auth);
+  const { loading, error: authError } = useSelector((state) => state.auth);
   const { toast, show } = useToast();
   const { theme } = useTheme();
   const isLight = theme === "light";
@@ -35,6 +35,7 @@ const LoginPage = () => {
   const [capsPassword, setCapsPassword] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+  const [lastAuthError, setLastAuthError] = useState("");
 
   const validEmail = useMemo(
     () => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email),
@@ -63,28 +64,49 @@ const LoginPage = () => {
     setErrors(e);
     if (e.email || e.password) return;
 
-    try {
-      await dispatch(login({ email, password })).unwrap();
-      show("Authorization successful. Opening terminal...", "success");
-      if (rememberMe) {
-        localStorage.setItem("fgpt_login_email", email);
-        localStorage.setItem("fgpt_remember_me", "true");
+      try {
+        const result = await dispatch(login({ email, password })).unwrap();
+        if (!result?.token) {
+          setFormError("Invalid login details. Please check your email and password and try again.");
+          show("Invalid login details. Please try again.", "error");
+          return;
+        }
+        show("Authorization successful. Opening terminal...", "success");
+        if (rememberMe) {
+          localStorage.setItem("fgpt_login_email", email);
+          localStorage.setItem("fgpt_remember_me", "true");
       } else {
         localStorage.removeItem("fgpt_login_email");
         localStorage.removeItem("fgpt_remember_me");
       }
       navigate("/dashboard");
-    } catch (err) {
-      const msg = err?.message || err?.toString() || "";
-      if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
-        setFormError("Email not verified. Please check your inbox and confirm your account before signing in.");
-      } else {
-        setFormError(msg || "Authentication failed. Please verify your secure credentials and try again.");
+      } catch (err) {
+        const msg = err?.message || err?.toString() || "";
+        if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
+          setFormError("Email not verified. Please check your inbox and confirm your account before signing in.");
+          show("Email not verified. Please confirm your account.", "error");
+        } else {
+          setFormError("Invalid login details. Please check your email and password and try again.");
+          show("Invalid login details. Please try again.", "error");
+        }
+        setErrors({ email: "Invalid", password: "Invalid" });
+      } finally {
+        setIsSubmittingLogin(false);
       }
-    } finally {
-      setIsSubmittingLogin(false);
+    };
+
+  useEffect(() => {
+    if (!authError || authError === lastAuthError) return;
+    setLastAuthError(authError);
+    const msg = typeof authError === "string" ? authError : "Invalid login details.";
+    if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
+      setFormError("Email not verified. Please check your inbox and confirm your account before signing in.");
+      show("Email not verified. Please confirm your account.", "error");
+    } else {
+      setFormError("Invalid login details. Please check your email and password and try again.");
+      show("Invalid login details. Please try again.", "error");
     }
-  };
+  }, [authError, lastAuthError, show]);
 
   useEffect(() => {
     const rm = localStorage.getItem("fgpt_remember_me") === "true";
