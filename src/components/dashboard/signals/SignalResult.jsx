@@ -1,7 +1,9 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const SignalResult = ({ signal, user }) => {
+    const navigate = useNavigate();
     if (!signal) return null;
 
     // Unified Mapping for SignalResponse (live) vs Database Row (saved)
@@ -22,6 +24,26 @@ const SignalResult = ({ signal, user }) => {
 
     const labelWidth = 17;
     const pad = (label) => label.padEnd(labelWidth, ' ');
+    const signalDetected = signal.signal !== false;
+    const confidencePct = signal.confidence != null ? Math.round(signal.confidence * 100) : null;
+
+    const handleLearnAboutSignal = () => {
+        navigate('/dashboard/mentor/messages/new', {
+            state: {
+                fromSignals: true,
+                prefilledQuestion: `Explain why ${data.reasoning || 'this signal was detected'}. How does this affect ${data.pair}?`,
+            },
+        });
+    };
+
+    const handleGenerateStrategy = () => {
+        navigate('/dashboard/codegen/session/new', {
+            state: {
+                fromSignals: true,
+                prefilledDescription: `Create a strategy that trades ${data.pair} ${data.direction} when similar forex exposure signals appear. Use confidence threshold of ${confidencePct != null ? `${confidencePct}%` : 'a suitable threshold'}.`,
+            },
+        });
+    };
 
     return (
         <Motion.div
@@ -57,6 +79,25 @@ const SignalResult = ({ signal, user }) => {
                 <div className="mb-10 text-gray-300 whitespace-pre-wrap leading-relaxed max-w-lg">
                     {data.reasoning}
                 </div>
+
+                {signalDetected && (
+                    <div className="mb-10 flex flex-wrap gap-3">
+                        <button
+                            type="button"
+                            onClick={handleLearnAboutSignal}
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
+                        >
+                            Learn About This Signal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleGenerateStrategy}
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-yellow-500 text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition cursor-pointer"
+                        >
+                            Generate Strategy Based On This
+                        </button>
+                    </div>
+                )}
 
                 <div className="text-white font-black tracking-widest uppercase mb-6">
                     {'                '}Signal Information

@@ -34,8 +34,8 @@ const BacktestForm = () => {
 
     const [customCode, setCustomCode] = useState('');
     const [showCodePreview, setShowCodePreview] = useState(false);
-
-
+    const customStrategyName = location.state?.strategyName || 'Custom Strategy';
+    const customStrategyType = location.state?.strategyType || 'custom';
 
     const [form, setForm] = useState({
         pair: 'EURUSD',
@@ -70,6 +70,7 @@ const BacktestForm = () => {
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
     const selectedStrategy = form?.strategy_name || 'sma';
+    const isCustomMode = selectedStrategy === 'custom';
     const setSelectedStrategy = (val) => set('strategy_name', val);
 
     useEffect(() => {
@@ -146,8 +147,17 @@ const BacktestForm = () => {
             }
 
             toast.success('Simulation complete!');
-            // Navigate to dedicated results page, pass customCode for analysis mapping
-            navigate(`/dashboard/backtest/${result.id}`, { state: { customCode: form.strategy_name === 'custom' ? customCode : undefined } });
+            navigate(`/dashboard/backtest/${result.id}`, {
+                state: form.strategy_name === 'custom'
+                    ? {
+                        mode: 'custom',
+                        customCode,
+                        strategyName: customStrategyName,
+                        strategyType: customStrategyType,
+                        source: 'codegen',
+                    }
+                    : null,
+            });
         } catch (err) {
             const msg = err?.response?.data?.detail || 'Backtest failed. Please check your inputs.';
             setError(msg);
@@ -171,7 +181,7 @@ const BacktestForm = () => {
                     Neural Simulation Engine
                 </p>
                 <h1 className="text-3xl font-black text-white">
-                    New{' '}
+                    {isCustomMode && customCode ? 'Custom ' : 'New '}{' '}
                     <span
                         className="bg-clip-text text-transparent"
                         style={{ backgroundImage: `linear-gradient(135deg, #FFD700, ${GOLD})` }}
@@ -180,9 +190,27 @@ const BacktestForm = () => {
                     </span>
                 </h1>
                 <p className="text-xs text-gray-500 mt-1">
-                    Fill in the parameters below and click <strong className="text-gray-300">Run Backtest</strong> to start the simulation.
+                    {isCustomMode && customCode
+                        ? 'A generated strategy has been loaded. Review the parameters below and run a custom backtest.'
+                        : 'Fill in the parameters below and click '}
+                    {!(isCustomMode && customCode) && <strong className="text-gray-300">Run Backtest</strong>}
+                    {!(isCustomMode && customCode) && ' to start the simulation.'}
                 </p>
             </Motion.div>
+
+            {isCustomMode && customCode && (
+                <div className="p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/5">
+                    <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.25em] mb-2">
+                        Custom Strategy Loaded
+                    </p>
+                    <p className="text-sm text-gray-300 font-bold">
+                        {customStrategyName}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        Strategy code was passed in from CodeGen and will be included in the backtest request.
+                    </p>
+                </div>
+            )}
 
             <Motion.form
                 initial={{ opacity: 0, y: 12 }}
@@ -344,6 +372,7 @@ const BacktestForm = () => {
                     </div>
                 </div>
 
+                {selectedStrategy !== 'custom' && (
                 <div className="p-5 rounded-2xl border border-white/[0.06] bg-white/[0.015]">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-4">
                         Strategy Parameters
@@ -410,6 +439,7 @@ const BacktestForm = () => {
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* ── ROW 5: Cost Preset / Data Source ─────────────────── */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -456,7 +486,7 @@ const BacktestForm = () => {
                     </div>
                     <button 
                         type="button" 
-                        onClick={() => navigate('/mentor')} 
+                        onClick={() => navigate('/dashboard/codegen/session/new')} 
                         className="text-xs font-bold px-4 py-2 bg-yellow-500/10 text-yellow-500 rounded-lg hover:bg-yellow-500 hover:text-black transition-colors"
                     >
                         Go to CodeGen

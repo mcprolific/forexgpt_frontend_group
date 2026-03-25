@@ -81,7 +81,7 @@ const IntelligenceBlock = ({ title, children, delay = 0 }) => (
     </div>
 );
 
-const BacktestResults = ({ result, onDelete }) => {
+const BacktestResults = ({ result, onDelete, onAnalyze, onDownloadCode, canDownloadCode = false }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -96,7 +96,12 @@ const BacktestResults = ({ result, onDelete }) => {
     const selectedStrategy = result?.strategy_name || 'custom';
 
     const handleUnderstandWhy = () => {
-        navigate('/mentor', {
+        if (onAnalyze) {
+            onAnalyze();
+            return;
+        }
+
+        navigate('/dashboard/mentor/messages/new', {
             state: {
                 mode: 'analyze',
                 strategyCode: customCode,
@@ -104,6 +109,26 @@ const BacktestResults = ({ result, onDelete }) => {
                 results: results
             }
         });
+    };
+
+    const handleDownloadStrategy = () => {
+        if (onDownloadCode) {
+            onDownloadCode();
+            return;
+        }
+
+        if (!customCode) {
+            return;
+        }
+
+        const blob = new Blob([customCode], { type: 'text/x-python' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        a.href = url;
+        a.download = 'custom_strategy.py';
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const initialCapital = React.useMemo(() =>
@@ -593,40 +618,30 @@ const BacktestResults = ({ result, onDelete }) => {
                     {/* ── Custom Strategy Analysis ── */}
                     {isCustomStrategy && customCode && (
                         <IntelligenceBlock title="AI Analysis Options" delay={0.4}>
-                            {results.metrics?.sharpe_ratio < 1.0 || Math.abs(results.metrics?.max_drawdown_pct) > 15 ? (
-                                <div className="space-y-4 text-center">
-                                    <p className="text-[10px] text-white/50 leading-relaxed">
-                                        This strategy did not meet standard performance benchmarks (Sharpe {'<'} 1.0 or Drawdown {'>'} 15%).
-                                    </p>
+                            <div className="space-y-4 text-center">
+                                <p className="text-[10px] text-white/50 leading-relaxed">
+                                    Review this custom strategy further in Mentor, or download the generated code for inspection and reuse.
+                                </p>
+                                <div className="grid grid-cols-1 gap-3">
                                     <button
+                                        type="button"
                                         onClick={handleUnderstandWhy}
                                         className="w-full text-[11px] font-bold px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2"
                                     >
                                         <FiActivity className="w-4 h-4" />
                                         Understand Why This Failed
                                     </button>
-                                </div>
-                            ) : results.metrics?.sharpe_ratio >= 1.0 && Math.abs(results.metrics?.max_drawdown_pct) < 15 ? (
-                                <div className="space-y-4 text-center">
-                                    <p className="text-[10px] text-white/50 leading-relaxed">
-                                        This strategy meets our performance criteria. You are ready to deploy.
-                                    </p>
                                     <button
-                                        className="w-full text-[11px] font-bold px-4 py-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] rounded-xl hover:bg-[#D4AF37] hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2"
-                                        onClick={() => {
-                                            const blob = new Blob([customCode], { type: 'text/plain' });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url;
-                                            a.download = 'custom_strategy.py';
-                                            a.click();
-                                        }}
+                                        type="button"
+                                        onClick={handleDownloadStrategy}
+                                        disabled={!canDownloadCode && !customCode}
+                                        className="w-full text-[11px] font-bold px-4 py-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] rounded-xl hover:bg-[#D4AF37] hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <FiDownload className="w-4 h-4" />
                                         Download Code
                                     </button>
                                 </div>
-                            ) : null}
+                            </div>
                         </IntelligenceBlock>
                     )}
 

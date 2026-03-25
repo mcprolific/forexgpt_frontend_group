@@ -28,6 +28,13 @@ import {
   improveStrategy,
 } from '../../../services/codeGenService';
 
+const sanitizeFileName = (value) =>
+  (value || 'strategy')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) || 'strategy';
+
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -72,6 +79,10 @@ const CodeGeneration = () => {
       if (mentorPrompt) {
         setNewMessage(mentorPrompt);
       }
+    }
+
+    if (state.fromSignals && state.prefilledDescription) {
+      setNewMessage(state.prefilledDescription);
     }
 
     if (state.mode === 'improve') {
@@ -119,6 +130,21 @@ const CodeGeneration = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDownloadCode = (code, fileNameHint = latestStrategyDesc) => {
+    if (!code) return;
+
+    const blob = new Blob([code], { type: 'text/x-python' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `${sanitizeFileName(fileNameHint)}.py`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // ── Send message (initial generation) ─────────────────────
@@ -260,13 +286,14 @@ const CodeGeneration = () => {
       console.error('No code available to test');
       return;
     }
-    navigate('/backtest', {
+    navigate('/dashboard/backtest/new', {
       state: {
         mode: 'custom',
         customCode: code,
         strategyName: latestStrategyDesc.substring(0, 50) || 'Custom Strategy',
         strategyType: 'custom',
         version,
+        source: 'codegen',
       },
     });
   };
@@ -353,11 +380,11 @@ const CodeGeneration = () => {
               {isImproved ? 'Test Improved Strategy' : 'Test Strategy'}
             </button>
             <button
-              onClick={() => handleCopy(code, `dl-${messageId}`)}
+              onClick={() => handleDownloadCode(code, latestStrategyDesc || `strategy-${messageId}`)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
             >
               <FiDownload size={12} />
-              {copiedId === `dl-${messageId}` ? 'Copied!' : 'Copy Code'}
+              Download Code
             </button>
           </div>
         </div>
