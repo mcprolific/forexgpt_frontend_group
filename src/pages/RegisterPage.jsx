@@ -160,7 +160,9 @@ const RegisterPage = () => {
     try {
       const res = await dispatch(registerUser(payload)).unwrap();
       if (res?.requires_confirmation) {
-        setConfirmNotice(res?.email || "");
+        const email = res?.email || form.email.trim();
+        setConfirmNotice(email);
+        navigate("/verify-email", { state: { email } });
       } else {
         show("Registration successful. You can now log in.", "success");
         navigate("/login");

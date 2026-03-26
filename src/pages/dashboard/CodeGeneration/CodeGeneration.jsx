@@ -28,6 +28,23 @@ import {
   improveStrategy,
 } from '../../../services/codeGenService';
 
+const sanitizeFileName = (value) =>
+  (value || 'strategy')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) || 'strategy';
+
+const formatSummaryPercent = (value) =>
+  value != null && value !== ''
+    ? `${Number(value).toFixed(2)}%`
+    : 'N/A';
+
+const formatSummaryMetric = (value, decimals = 2) =>
+  value != null && value !== ''
+    ? Number(value).toFixed(decimals)
+    : 'N/A';
+
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -76,7 +93,11 @@ const CodeGeneration = () => {
       }
     }
 
+<<<<<<< HEAD
     if (state.prefilledDescription) {
+=======
+    if (state.fromSignals && state.prefilledDescription) {
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
       setNewMessage(state.prefilledDescription);
     }
 
@@ -136,6 +157,21 @@ const CodeGeneration = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDownloadCode = (code, fileNameHint = latestStrategyDesc) => {
+    if (!code) return;
+
+    const blob = new Blob([code], { type: 'text/x-python' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `${sanitizeFileName(fileNameHint)}.py`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // ── Send message (initial generation) ─────────────────────
   const handleSendMessage = async () => {
     if (!newMessage.trim() || sending || !user?.id) return;
@@ -170,12 +206,18 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
+<<<<<<< HEAD
           // Always append the assistant reply first so the user sees it,
           // then update the URL if this was a brand-new conversation.
           setMessages((prev) => [...prev, assistantMsg]);
           if (assistantMsg.code) {
             setLatestGeneratedCode(assistantMsg.code);
           }
+=======
+        // Always append the assistant reply first so the user sees it,
+        // then update the URL if this was a brand-new conversation.
+        setMessages((prev) => [...prev, assistantMsg]);
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
@@ -282,13 +324,14 @@ const CodeGeneration = () => {
       console.error('No code available to test');
       return;
     }
-    navigate('/backtest', {
+    navigate('/dashboard/backtest/new', {
       state: {
         mode: 'custom',
         customCode: code,
         strategyName: latestStrategyDesc.substring(0, 50) || 'Custom Strategy',
         strategyType: 'custom',
         version,
+        source: 'codegen',
       },
     });
   };
@@ -375,11 +418,11 @@ const CodeGeneration = () => {
               {isImproved ? 'Test Improved Strategy' : 'Test Strategy'}
             </button>
             <button
-              onClick={() => handleCopy(code, `dl-${messageId}`)}
+              onClick={() => handleDownloadCode(code, latestStrategyDesc || `strategy-${messageId}`)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
             >
               <FiDownload size={12} />
-              {copiedId === `dl-${messageId}` ? 'Copied!' : 'Copy Code'}
+              Download Code
             </button>
           </div>
         </div>
@@ -458,10 +501,29 @@ const CodeGeneration = () => {
               </p>
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: 'Sharpe', value: backtestResults.sharpe_ratio ?? 'N/A' },
-                  { label: 'Max DD', value: backtestResults.max_drawdown != null ? `${backtestResults.max_drawdown}%` : 'N/A' },
-                  { label: 'Win Rate', value: backtestResults.win_rate != null ? `${backtestResults.win_rate}%` : 'N/A' },
-                  { label: 'Return', value: backtestResults.total_return != null ? `${backtestResults.total_return}%` : 'N/A' },
+                  { label: 'Sharpe', value: formatSummaryMetric(backtestResults.sharpe_ratio) },
+                  {
+                    label: 'Max DD',
+                    value: formatSummaryPercent(
+                      backtestResults.max_drawdown ?? backtestResults.max_drawdown_pct
+                    ),
+                  },
+                  {
+                    label: 'Win Rate',
+                    value: formatSummaryPercent(
+                      backtestResults.win_rate ?? backtestResults.win_rate_pct
+                    ),
+                  },
+                  {
+                    label: 'Return',
+                    value: formatSummaryPercent(
+                      backtestResults.total_return ?? backtestResults.total_return_pct
+                    ),
+                  },
+                  {
+                    label: 'Expectancy',
+                    value: formatSummaryMetric(backtestResults.expectancy, 4),
+                  },
                 ].map((m) => (
                   <div key={m.label} className="bg-black/30 rounded-lg p-2 text-center">
                     <p className="text-[9px] text-gray-600 uppercase tracking-widest">{m.label}</p>

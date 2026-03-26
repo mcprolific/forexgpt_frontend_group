@@ -81,7 +81,16 @@ const IntelligenceBlock = ({ title, children, delay = 0 }) => (
     </div>
 );
 
-const BacktestResults = ({ result, onDelete }) => {
+const BacktestResults = ({
+    result,
+    onDelete,
+    onAnalyze,
+    onNeedsImprovement,
+    onDownloadCode,
+    canDownloadCode = false,
+    performanceVerdict = null,
+    expectancy = null,
+}) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -90,13 +99,17 @@ const BacktestResults = ({ result, onDelete }) => {
     const [tradesLoading, setTradesLoading] = useState(false);
 
     const customCode = location.state?.customCode;
-    const isCustomStrategy = !!customCode || result?.strategy_name === 'custom';
 
     const results = result;
     const selectedStrategy = result?.strategy_name || 'custom';
 
     const handleUnderstandWhy = () => {
-        navigate('/mentor', {
+        if (onAnalyze) {
+            onAnalyze();
+            return;
+        }
+
+        navigate('/dashboard/mentor/messages/new', {
             state: {
                 mode: 'analyze',
                 strategyCode: customCode,
@@ -104,6 +117,30 @@ const BacktestResults = ({ result, onDelete }) => {
                 results: results
             }
         });
+    };
+
+    const handleDownloadStrategy = () => {
+        if (onDownloadCode) {
+            onDownloadCode();
+            return;
+        }
+
+        if (!customCode) {
+            return;
+        }
+
+        const blob = new Blob([customCode], { type: 'text/x-python' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        a.href = url;
+        a.download = 'custom_strategy.py';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleTestAgain = () => {
+        navigate('/dashboard/backtest/new');
     };
 
     const initialCapital = React.useMemo(() =>
@@ -378,6 +415,21 @@ const BacktestResults = ({ result, onDelete }) => {
 
     const m = rollingMetrics; // Use our reactive metrics object
     const equity = result.equity_curve || [];
+    const showUnderstandWhy = performanceVerdict === 'critical' || performanceVerdict === 'poor';
+    const showNeedsImprovement = performanceVerdict === 'acceptable';
+    const showDownloadAction = performanceVerdict === 'good' && (canDownloadCode || Boolean(customCode));
+    const actionTitleByVerdict = {
+        critical: 'Critical Failure',
+        poor: 'Performance Review',
+        acceptable: 'Needs Improvement',
+        good: 'Deployment Ready',
+    };
+    const actionMessageByVerdict = {
+        critical: 'This strategy is failing core forex benchmarks. Review the mentor analysis before iterating again.',
+        poor: 'The strategy shows weak risk-adjusted performance. Mentor can help explain where the edge breaks down.',
+        acceptable: 'This strategy is promising but still below production quality. Improve it before treating it as deployment-ready.',
+        good: 'This strategy meets the current benchmark checks. Download the code or rerun another validation cycle.',
+    };
 
     // Formatting helpers
     const fmt = (val, dec = 2) => val != null ? Number(val).toFixed(dec) : '—';
@@ -530,6 +582,7 @@ const BacktestResults = ({ result, onDelete }) => {
                                 { label: 'Total Costs', value: money(m.total_costs), color: 'text-yellow-500/80' },
                                 { label: 'Sharpe Ratio', value: fmt(m.sharpe_ratio), color: 'text-white' },
                                 { label: 'Sortino Ratio', value: fmt(m.sortino_ratio), color: 'text-white' },
+                                { label: 'Expectancy', value: expectancy != null ? fmt(expectancy, 4) : '—', color: expectancy != null && expectancy < 0 ? 'text-red-500' : 'text-white' },
                                 { label: 'Avg Trade PnL', value: m.total_trades > 0 ? money(m.total_pnl / m.total_trades) : money(0), color: m.total_pnl >= 0 ? 'text-green-500' : 'text-red-500' },
                                 { label: 'Vol (Annual)', value: perc(m.volatility_annual_pct), color: 'text-white' },
                             ].map((item, i) => (
@@ -590,45 +643,64 @@ const BacktestResults = ({ result, onDelete }) => {
                         </ul>
                     </div>
 
-                    {/* ── Custom Strategy Analysis ── */}
-                    {isCustomStrategy && customCode && (
-                        <IntelligenceBlock title="AI Analysis Options" delay={0.4}>
-                            {results.metrics?.sharpe_ratio < 1.0 || Math.abs(results.metrics?.max_drawdown_pct) > 15 ? (
-                                <div className="space-y-4 text-center">
-                                    <p className="text-[10px] text-white/50 leading-relaxed">
-                                        This strategy did not meet standard performance benchmarks (Sharpe {'<'} 1.0 or Drawdown {'>'} 15%).
-                                    </p>
+                    <IntelligenceBlock title={actionTitleByVerdict[performanceVerdict] || 'Strategy Actions'} delay={0.4}>
+                        <div className="space-y-4 text-center">
+                            <p className="text-[10px] text-white/50 leading-relaxed">
+                                {actionMessageByVerdict[performanceVerdict] || 'Use these actions to review, improve, or rerun this strategy.'}
+                            </p>
+                            {expectancy != null && (
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${expectancy < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                    Expectancy: {fmt(expectancy, 4)}
+                                </p>
+                            )}
+                            <div className="grid grid-cols-1 gap-3">
+                                {showUnderstandWhy && (
                                     <button
+                                        type="button"
                                         onClick={handleUnderstandWhy}
                                         className="w-full text-[11px] font-bold px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2"
                                     >
                                         <FiActivity className="w-4 h-4" />
                                         Understand Why This Failed
                                     </button>
-                                </div>
-                            ) : results.metrics?.sharpe_ratio >= 1.0 && Math.abs(results.metrics?.max_drawdown_pct) < 15 ? (
-                                <div className="space-y-4 text-center">
-                                    <p className="text-[10px] text-white/50 leading-relaxed">
-                                        This strategy meets our performance criteria. You are ready to deploy.
-                                    </p>
+                                )}
+                                {showNeedsImprovement && (
                                     <button
-                                        className="w-full text-[11px] font-bold px-4 py-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] rounded-xl hover:bg-[#D4AF37] hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2"
-                                        onClick={() => {
-                                            const blob = new Blob([customCode], { type: 'text/plain' });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url;
-                                            a.download = 'custom_strategy.py';
-                                            a.click();
-                                        }}
+                                        type="button"
+                                        onClick={onNeedsImprovement}
+                                        className="w-full text-[11px] font-bold px-4 py-3 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-xl hover:bg-blue-500 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                    >
+                                        <FiActivity className="w-4 h-4" />
+                                        This Needs Improvement
+                                    </button>
+                                )}
+                                {showDownloadAction && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadStrategy}
+                                        disabled={!canDownloadCode && !customCode}
+                                        className="w-full text-[11px] font-bold px-4 py-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] rounded-xl hover:bg-[#D4AF37] hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <FiDownload className="w-4 h-4" />
-                                        Download Code
+                                        Download Strategy Code
                                     </button>
-                                </div>
-                            ) : null}
-                        </IntelligenceBlock>
-                    )}
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleTestAgain}
+                                    className="w-full text-[11px] font-bold px-4 py-3 bg-white/5 border border-white/10 text-white rounded-xl hover:bg-white hover:text-black transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <FiActivity className="w-4 h-4" />
+                                    Test Again
+                                </button>
+                            </div>
+                            {!showDownloadAction && performanceVerdict === 'good' && !customCode && (
+                                <p className="text-[10px] text-white/35 leading-relaxed">
+                                    Code download is only available when this backtest came from a CodeGen strategy handoff.
+                                </p>
+                            )}
+                        </div>
+                    </IntelligenceBlock>
 
                     <div className="p-6 rounded-3xl border border-red-500/10 bg-red-500/[0.02] hover:bg-red-500/5 transition-all text-center cursor-pointer" onClick={() => onDelete(result.id)}>
                         <div className="flex items-center justify-center gap-3">

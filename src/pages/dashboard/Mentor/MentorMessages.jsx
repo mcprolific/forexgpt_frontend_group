@@ -106,8 +106,15 @@ const MentorMessages = () => {
 
   useEffect(() => {
     const state = location.state;
+    const incomingResults = state?.metricsForMentor || state?.results;
+    const incomingStrategyType = state?.strategyType || state?.metricsForMentor?.strategy_name;
+    const incomingStrategyCode =
+      state?.strategyCode ||
+      state?.metricsForMentor?.custom_code ||
+      state?.results?.custom_code ||
+      '';
 
-    if (!userId || state?.mode !== 'analyze' || analysisMode || !state?.results) {
+    if (!userId || state?.mode !== 'analyze' || analysisMode || !incomingResults) {
       return;
     }
 
@@ -115,14 +122,20 @@ const MentorMessages = () => {
 
     const runBacktestAnalysis = async () => {
       setAnalysisMode(true);
-      setBacktestData(state);
+      setBacktestData({
+        ...state,
+        strategyType: incomingStrategyType,
+        strategyCode: incomingStrategyCode,
+        results: incomingResults,
+      });
       setSending(true);
 
       try {
         const data = await analyzeBacktest({
           user_id: userId,
-          strategy_type: state.strategyType,
-          results: state.results,
+          strategy_type: incomingStrategyType,
+          strategy_code: incomingStrategyCode || null,
+          results: incomingResults,
         });
 
         if (cancelled) {
@@ -273,12 +286,21 @@ const MentorMessages = () => {
   };
 
   const handleImproveStrategy = () => {
-    if (!backtestData) return;
+    const strategyCode =
+      backtestData?.strategyCode ||
+      backtestData?.results?.custom_code ||
+      backtestData?.code ||
+      '';
+
+    if (!backtestData || !strategyCode) {
+      toast.error('No strategy code is available to improve.');
+      return;
+    }
 
     navigate('/dashboard/codegen/session/new', {
       state: {
         mode: 'improve',
-        originalCode: backtestData?.strategyCode || backtestData?.code || '',
+        originalCode: strategyCode,
         backtestResults: backtestData?.results || {},
         mentorAnalysis: messages[messages.length - 1]?.content || '',
       },
@@ -346,7 +368,12 @@ const MentorMessages = () => {
             const showImproveStrategy =
               message.role === 'assistant' &&
               analysisMode &&
-              idx === messages.length - 1;
+              idx === messages.length - 1 &&
+              Boolean(
+                backtestData?.strategyCode ||
+                backtestData?.results?.custom_code ||
+                backtestData?.code
+              );
 
             return (
               <Motion.div
