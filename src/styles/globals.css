@@ -34,6 +34,24 @@ body {
   background-attachment: fixed, fixed;
 }
 
+/* Make semantic interactive controls feel clickable by default. */
+a[href],
+button:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+label[for],
+summary,
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Global dot grid utility */
 .dot-grid {
   position: absolute;
