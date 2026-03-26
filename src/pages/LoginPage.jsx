@@ -34,10 +34,19 @@ const LoginPage = () => {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSending, setForgotSending] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState("");
+  const [forgotStatusType, setForgotStatusType] = useState("info");
   const [capsPassword, setCapsPassword] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [lastAuthError, setLastAuthError] = useState("");
+
+  const closeForgotModal = () => {
+    setForgotOpen(false);
+    setForgotEmail("");
+    setForgotStatus("");
+    setForgotStatusType("info");
+  };
 
   const validEmail = useMemo(
     () => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email),
@@ -73,7 +82,6 @@ const LoginPage = () => {
           show("Invalid login details. Please try again.", "error");
           return;
         }
-        show("Authorization successful. Opening terminal...", "success");
         if (rememberMe) {
           localStorage.setItem("fgpt_login_email", email);
           localStorage.setItem("fgpt_remember_me", "true");
@@ -81,7 +89,15 @@ const LoginPage = () => {
         localStorage.removeItem("fgpt_login_email");
         localStorage.removeItem("fgpt_remember_me");
       }
-      navigate("/dashboard");
+      navigate("/dashboard", {
+        state: {
+          toast: {
+            message: "Authorization successful. Welcome back.",
+            type: "success",
+            duration: 4500,
+          },
+        },
+      });
       } catch (err) {
         const msg = err?.message || err?.toString() || "";
         if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
@@ -141,8 +157,15 @@ const LoginPage = () => {
           }
           setTimeout(() => {
             setOauthHandled(true);
-            show("Logged in with OAuth", "success");
-            navigate("/dashboard");
+            navigate("/dashboard", {
+              state: {
+                toast: {
+                  message: "Logged in with Google successfully.",
+                  type: "success",
+                  duration: 4500,
+                },
+              },
+            });
           }, 0);
         }
       }
@@ -448,30 +471,36 @@ const LoginPage = () => {
 
       <Modal
         open={forgotOpen}
-        onClose={() => setForgotOpen(false)}
+        onClose={closeForgotModal}
         title="Reset Password"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={closeForgotModal}>
+              {forgotStatusType === "success" ? "Close" : "Cancel"}
+            </Button>
             <Button
               onClick={async () => {
                 if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(forgotEmail)) {
-                  show("Enter a valid email", "error");
+                  setForgotStatus("Enter a valid email address.");
+                  setForgotStatusType("error");
                   return;
                 }
                 try {
                   setForgotSending(true);
+                  setForgotStatus("");
                   await forgotPasswordAPI(forgotEmail.trim());
-                  show("If this email exists, a reset link will be sent.", "success");
-                  setForgotOpen(false);
-                  setForgotEmail("");
+                  setForgotStatus(
+                    "If this email exists, a reset link will be sent. Check your inbox and spam folder."
+                  );
+                  setForgotStatusType("success");
                 } catch (error) {
-                  show(error.message || "Could not send reset link.", "error");
+                  setForgotStatus(error.message || "Could not send reset link.");
+                  setForgotStatusType("error");
                 } finally {
                   setForgotSending(false);
                 }
               }}
-              disabled={forgotSending}
+              disabled={forgotSending || forgotStatusType === "success"}
             >
               {forgotSending ? "Sending..." : "Send link"}
             </Button>
@@ -480,12 +509,30 @@ const LoginPage = () => {
       >
         <div className="space-y-3">
           <div className="text-sm text-gray-300">Enter your account email to receive a reset link.</div>
+          {forgotStatus && (
+            <div
+              role="status"
+              className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                forgotStatusType === "success"
+                  ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                  : "border-red-400/30 bg-red-500/10 text-red-200"
+              }`}
+            >
+              {forgotStatus}
+            </div>
+          )}
           <Input
             id="forgot-email"
             type="email"
             label="Email address"
             value={forgotEmail}
-            onChange={(e) => setForgotEmail(e.target.value)}
+            onChange={(e) => {
+              setForgotEmail(e.target.value);
+              if (forgotStatusType === "error") {
+                setForgotStatus("");
+                setForgotStatusType("info");
+              }
+            }}
           />
         </div>
       </Modal>

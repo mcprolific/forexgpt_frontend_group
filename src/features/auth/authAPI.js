@@ -60,6 +60,33 @@ const postToFirstAvailable = async (candidates, fallbackMessage) => {
   throw new Error(getApiErrorMessage(lastError, fallbackMessage));
 };
 
+const requestToFirstAvailable = async (candidates, fallbackMessage) => {
+  let lastError;
+
+  for (const candidate of candidates) {
+    const method = (candidate.method || "post").toLowerCase();
+
+    try {
+      return await axiosInstance.request({
+        method,
+        url: candidate.url,
+        data: candidate.data,
+        ...publicRequestConfig,
+        ...(candidate.config || {}),
+      });
+    } catch (error) {
+      lastError = error;
+      const status = error?.response?.status;
+
+      if (![404, 405].includes(status)) {
+        break;
+      }
+    }
+  }
+
+  throw new Error(getApiErrorMessage(lastError, fallbackMessage));
+};
+
 export const loginAPI = async (payload) => {
   try {
     const body = {
@@ -127,6 +154,33 @@ export const forgotPasswordAPI = async (email) => {
       { url: "/password/forgot", data: { email } },
     ],
     "Could not send password reset email."
+  );
+  return response.data;
+};
+
+export const updatePasswordAPI = async ({ newPassword, accessToken, refreshToken }) => {
+  const response = await requestToFirstAvailable(
+    [
+      {
+        url: "/password-update",
+        data: { new_password: newPassword, refresh_token: refreshToken },
+        config: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      },
+      {
+        url: "/auth/password-update",
+        data: { new_password: newPassword, refresh_token: refreshToken },
+        config: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      },
+    ],
+    "Could not update password."
   );
   return response.data;
 };
