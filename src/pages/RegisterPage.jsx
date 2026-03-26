@@ -8,11 +8,14 @@ import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
 import Toast from "../components/ui/Toast";
 import useToast from "../hooks/useToast";
-import axiosInstance from "../services/axiosInstance";
 import { useTheme } from "../contexts/ThemeContext";
 import Logo from "../assets/logo.png";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import Modal from "../components/ui/Modal";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import { forgotPasswordAPI, resendConfirmationAPI } from "../features/auth/authAPI";
 
 const RegisterPage = () => {
   const dispatch = useDispatch();
@@ -37,6 +40,9 @@ const RegisterPage = () => {
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const [confirmNotice, setConfirmNotice] = useState("");
   const [resending, setResending] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
   useEffect(() => {
     if (!cooldownUntil) return;
     const id = setInterval(() => {
@@ -162,7 +168,7 @@ const RegisterPage = () => {
       if (res?.requires_confirmation) {
         const email = res?.email || form.email.trim();
         setConfirmNotice(email);
-        navigate("/verify-email", { state: { email } });
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { state: { email } });
       } else {
         show("Registration successful. You can now log in.", "success");
         navigate("/login");
@@ -324,10 +330,10 @@ const RegisterPage = () => {
                     onClick={async () => {
                       try {
                         setResending(true);
-                        await axiosInstance.post("/resend-confirmation", { email: confirmNotice });
+                        await resendConfirmationAPI(confirmNotice);
                         show("Confirmation email resent. Check inbox and spam.", "success");
-                      } catch {
-                        show("Could not resend confirmation email. Try again later.", "error");
+                      } catch (error) {
+                        show(error.message || "Could not resend confirmation email. Try again later.", "error");
                       } finally {
                         setResending(false);
                       }
@@ -338,7 +344,7 @@ const RegisterPage = () => {
                     {resending ? "Resending..." : "Resend Confirmation Email"}
                   </button>
                   <Link
-                    to="/confirmed"
+                    to="/login"
                     className="inline-block mt-3 px-4 py-2 rounded-lg font-bold text-xs tracking-widest transition-all duration-200"
                     style={{ background: "linear-gradient(135deg, #FFD700, #D4AF37)", color: "#1A1A1A" }}
                   >
@@ -446,6 +452,16 @@ const RegisterPage = () => {
                       {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(form.email.trim());
+                      setForgotOpen(true);
+                    }}
+                    className="mt-2 text-[10px] font-bold text-[#D4AF37] hover:text-[#FFD700] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
                   {capsPassword && (
                     <p className="mt-1 text-[10px] text-amber-500 font-bold uppercase tracking-tight">Caps Lock is ON</p>
                   )}
@@ -589,6 +605,49 @@ const RegisterPage = () => {
       </div>
       <PublicFooter />
       {toast && <Toast message={toast.message} type={toast.type} />}
+      <Modal
+        open={forgotOpen}
+        onClose={() => setForgotOpen(false)}
+        title="Reset Password"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(forgotEmail)) {
+                  show("Enter a valid email", "error");
+                  return;
+                }
+                try {
+                  setForgotSending(true);
+                  await forgotPasswordAPI(forgotEmail.trim());
+                  show("If this email exists, a reset link will be sent.", "success");
+                  setForgotOpen(false);
+                  setForgotEmail("");
+                } catch (error) {
+                  show(error.message || "Could not send reset link.", "error");
+                } finally {
+                  setForgotSending(false);
+                }
+              }}
+              disabled={forgotSending}
+            >
+              {forgotSending ? "Sending..." : "Send link"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="text-sm text-gray-300">Enter your account email to receive a reset link.</div>
+          <Input
+            id="forgot-email"
+            type="email"
+            label="Email address"
+            value={forgotEmail}
+            onChange={(e) => setForgotEmail(e.target.value)}
+          />
+        </div>
+      </Modal>
     </>
   );
 };

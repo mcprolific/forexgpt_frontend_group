@@ -3,8 +3,8 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
-import axiosInstance from "../services/axiosInstance";
 import { useTheme } from "../contexts/ThemeContext";
+import { resendConfirmationAPI } from "../features/auth/authAPI";
 
 const VerifyEmailPage = () => {
   const navigate = useNavigate();
@@ -29,10 +29,10 @@ const VerifyEmailPage = () => {
     setResending(true);
     setStatus("");
     try {
-      await axiosInstance.post("/resend-confirmation", { email });
+      await resendConfirmationAPI(email);
       setStatus("Confirmation email resent. Check inbox and spam.");
-    } catch {
-      setStatus("Could not resend confirmation email. Try again later.");
+    } catch (error) {
+      setStatus(error.message || "Could not resend confirmation email. Try again later.");
     } finally {
       setResending(false);
     }
@@ -40,6 +40,7 @@ const VerifyEmailPage = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     navigate("/login");
   };
 

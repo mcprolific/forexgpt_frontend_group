@@ -10,7 +10,9 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (!config.skipAuth && token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -21,7 +23,7 @@ axiosInstance.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url || "";
-    if (status === 401 && !url.includes("/login")) {
+    if (status === 401 && !error.config?.skipAuthRedirect && !url.includes("/login")) {
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
