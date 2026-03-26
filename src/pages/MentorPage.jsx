@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { motion as Motion } from "framer-motion";
 import PublicNavbar from "../layout/PublicNavbar";
 import PublicFooter from "../layout/PublicFooter";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -12,10 +14,22 @@ const CHARCOAL2 = "#242424";
 const MentorPage = () => {
   const { theme } = useTheme();
   const isLight = theme === "light";
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
   const BG = isLight ? "#F0EDE6" : CHARCOAL;
   const BG2 = isLight ? "#ffffff" : CHARCOAL2;
   const TEXT = isLight ? "#1A1A1A" : "#f3f4f6";
   const MUTED = isLight ? "#636363" : "rgba(255,255,255,0.70)";
+
+  useEffect(() => {
+    const prefilledQuestion = location.state?.prefilledQuestion;
+    if (prefilledQuestion && user?.id) {
+      navigate('/dashboard/mentor/messages/new', {
+        state: { fromSignals: true, prefilledQuestion }
+      });
+    }
+  }, [location.state, navigate, user]);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden" style={{ background: BG, color: TEXT }}>

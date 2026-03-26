@@ -13,6 +13,7 @@ const GOLD_LIGHT = "#FFD700";
 const CodeGenSessions = () => {
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState("");
     const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
     const navigate = useNavigate();
     const { user } = useSelector((state) => state.auth);
@@ -29,6 +30,7 @@ const CodeGenSessions = () => {
         }
         try {
             setLoading(true);
+            setErrorMessage("");
             const data = await getConversations(user.id);
             // FIX: Filter out any sessions with missing conversation_id to prevent broken navigation
             const validSessions = (data || []).filter(
@@ -38,6 +40,7 @@ const CodeGenSessions = () => {
         } catch (error) {
             console.error("Error fetching code generation history:", error);
             toast.error("Failed to fetch sessions");
+            setErrorMessage("Failed to load sessions. Please try again.");
         } finally {
             setLoading(false);
         }
@@ -116,6 +119,11 @@ const CodeGenSessions = () => {
             </div>
 
             {/* Session List */}
+            {errorMessage && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+                    {errorMessage}
+                </div>
+            )}
             <Motion.div
                 variants={container}
                 initial="hidden"

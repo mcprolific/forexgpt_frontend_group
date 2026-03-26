@@ -22,8 +22,12 @@ axiosInstance.interceptors.response.use(
     const status = error.response?.status;
     const url = error.config?.url || "";
     if (status === 401 && !url.includes("/login")) {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+      const path = typeof window !== "undefined" ? window.location.pathname : "";
+      // Only force redirect for protected dashboard routes.
+      if (path.startsWith("/dashboard")) {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
