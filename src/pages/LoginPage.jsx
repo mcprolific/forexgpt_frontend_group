@@ -82,7 +82,6 @@ const LoginPage = () => {
           show("Invalid login details. Please try again.", "error");
           return;
         }
-        show("Authorization successful. Opening terminal...", "success");
         if (rememberMe) {
           localStorage.setItem("fgpt_login_email", email);
           localStorage.setItem("fgpt_remember_me", "true");
@@ -90,7 +89,15 @@ const LoginPage = () => {
         localStorage.removeItem("fgpt_login_email");
         localStorage.removeItem("fgpt_remember_me");
       }
-      navigate("/dashboard");
+      navigate("/dashboard", {
+        state: {
+          toast: {
+            message: "Authorization successful. Welcome back.",
+            type: "success",
+            duration: 4500,
+          },
+        },
+      });
       } catch (err) {
         const msg = err?.message || err?.toString() || "";
         if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
@@ -150,8 +157,15 @@ const LoginPage = () => {
           }
           setTimeout(() => {
             setOauthHandled(true);
-            show("Logged in with OAuth", "success");
-            navigate("/dashboard");
+            navigate("/dashboard", {
+              state: {
+                toast: {
+                  message: "Logged in with Google successfully.",
+                  type: "success",
+                  duration: 4500,
+                },
+              },
+            });
           }, 0);
         }
       }

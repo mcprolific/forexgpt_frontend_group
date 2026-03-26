@@ -18,6 +18,7 @@ const HomePage              = lazy(() => import('./pages/HomePage'));
 const LoginPage             = lazy(() => import('./pages/LoginPage'));
 const RegisterPage          = lazy(() => import('./pages/RegisterPage'));
 const EmailConfirmedPage    = lazy(() => import('./pages/EmailConfirmedPage'));
+const ResetPasswordPage     = lazy(() => import('./pages/ResetPasswordPage'));
 const VerifyEmailPage       = lazy(() => import('./pages/VerifyEmailPage'));
 const WhyPage               = lazy(() => import('./pages/WhyPage'));
 const HowToUsePage          = lazy(() => import('./pages/HowToUsePage'));
@@ -162,6 +163,8 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/confirmed" element={<EmailConfirmedPage />} />
           <Route path="/auth/confirm" element={<EmailConfirmedPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           <Route path="/why" element={<WhyPage />} />
           <Route path="/how-to-use" element={<HowToUsePage />} />
           <Route path="/services" element={<ServicesPage />} />

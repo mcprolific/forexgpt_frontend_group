@@ -33,6 +33,13 @@ const EmailConfirmedPage = () => {
 
     (async () => {
       try {
+        if (type === "recovery") {
+          navigate(`/reset-password${location.search}${location.hash}`, {
+            replace: true,
+          });
+          return;
+        }
+
         if (errorDescription) {
           setStatus({ loading: false, ok: false, message: errorDescription });
           return;

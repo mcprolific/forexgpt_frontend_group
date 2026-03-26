@@ -1,18 +1,38 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
+import Toast from "../../ui/Toast";
+import useToast from "../../../hooks/useToast";
 
 const GOLD = "#D4AF37";
 const CHARCOAL = "#1A1A1A";
 
 const DashboardLayout = () => {
   const [isOpen, setIsOpen] = useState(true);
+  const { toast, show } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
   };
+
+  useEffect(() => {
+    const flash = location.state?.toast;
+    if (!flash?.message) return;
+
+    show(flash.message, flash.type || "info", flash.duration || 4500);
+
+    const nextState = { ...(location.state || {}) };
+    delete nextState.toast;
+
+    navigate(location.pathname, {
+      replace: true,
+      state: Object.keys(nextState).length ? nextState : null,
+    });
+  }, [location.pathname, location.state, navigate, show]);
 
   return (
     <div className="dashboard-root flex h-screen overflow-hidden" style={{ background: CHARCOAL }}>
@@ -57,6 +77,7 @@ const DashboardLayout = () => {
           </Motion.div>
         </main>
       </div>
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </div>
   );
 };
