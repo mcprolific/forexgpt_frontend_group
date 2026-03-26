@@ -14,7 +14,8 @@ import {
 } from 'react-icons/fi'
 import { motion as Motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
-import { getDashboardStats, getActivityLogs } from '../../services/userService'
+import { getDashboardStats } from '../../services/userService'
+import { getUnifiedActivityLogs } from '../../services/activityService'
 import { getForexNews } from '../../services/newsService'
 import LoadingScreen from '../../components/ui/LoadingScreen'
 
@@ -23,6 +24,7 @@ const GOLD_LIGHT = "#FFD700";
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const userId = user?.user_id || user?.id;
   const [stats, setStats] = useState(null);
   const [activities, setActivities] = useState([]);
   const [news, setNews] = useState([]);
@@ -30,7 +32,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) return;
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
 
       try {
         setLoading(true);
@@ -40,7 +45,7 @@ const Dashboard = () => {
 
         const [statsData, activitiesData] = await Promise.all([
           getDashboardStats(),
-          getActivityLogs(5)
+          getUnifiedActivityLogs(userId, 5)
         ]);
         setStats(statsData);
         setActivities(activitiesData);
@@ -52,7 +57,7 @@ const Dashboard = () => {
     };
 
     fetchData();
-  }, [user?.id]);
+  }, [userId]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -294,7 +299,9 @@ const Dashboard = () => {
               <div key={i} className="p-4 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="h-1.5 w-1.5 rounded-full bg-yellow-500/50" />
-                  <p className="text-xs text-gray-300 font-medium truncate max-w-[180px]">{activity.action}</p>
+                  <p className="text-xs text-gray-300 font-medium truncate max-w-[180px]">
+                    {activity.title || activity.action}
+                  </p>
                 </div>
                 <span className="text-[10px] text-gray-600 whitespace-nowrap">
                   {new Date(activity.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
