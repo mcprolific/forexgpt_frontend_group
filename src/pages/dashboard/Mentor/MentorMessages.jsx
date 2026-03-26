@@ -59,6 +59,7 @@ const MentorMessages = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [analysisMode, setAnalysisMode] = useState(false);
   const [backtestData, setBacktestData] = useState(null);
 
@@ -86,6 +87,7 @@ const MentorMessages = () => {
       const cachedHistory = parseStoredMessages(localStorage.getItem(cacheKey));
 
       try {
+        setErrorMessage('');
         const res = await getConversationHistory(conversationId, userId);
         const history = Array.isArray(res.history) ? res.history : [];
         const nextHistory = history.length > 0 ? history : cachedHistory;
@@ -100,6 +102,7 @@ const MentorMessages = () => {
         } else {
           toast.error('Failed to load history');
         }
+        setErrorMessage('Failed to load conversation. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -307,6 +310,7 @@ const MentorMessages = () => {
     } catch (error) {
       console.error('Failed to send message:', error);
       toast.error('Failed to send message');
+      setErrorMessage('Failed to send message. Please try again.');
 
       setMessages((prev) => {
         const next = prev.filter((message) => message.id !== userMsg.id);
@@ -369,7 +373,7 @@ const MentorMessages = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
+    <div className="flex flex-col min-h-screen w-full bg-black/20 backdrop-blur-sm border border-white/5 overflow-hidden">
       <div className="bg-white/[0.02] border-b border-white/5 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -401,6 +405,11 @@ const MentorMessages = () => {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
       >
+        {errorMessage && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+            {errorMessage}
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <FiZap size={48} className="text-yellow-500 mb-4" />
@@ -560,7 +569,7 @@ const MentorMessages = () => {
         )}
       </div>
 
-      <div className="p-6 bg-white/[0.02] border-t border-white/5">
+      <div className="sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5">
         <div className="relative group">
           <input
             type="text"
@@ -575,7 +584,7 @@ const MentorMessages = () => {
             type="button"
             onClick={handleSendMessage}
             disabled={!newMessage.trim() || sending}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-xl bg-yellow-500 text-black flex items-center justify-center disabled:opacity-50 disabled:scale-100 disabled:grayscale shadow-lg shadow-yellow-500/20"
           >
             <FiSend size={18} />
           </button>

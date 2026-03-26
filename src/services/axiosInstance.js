@@ -23,10 +23,16 @@ axiosInstance.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url || "";
+
     if (status === 401 && !error.config?.skipAuthRedirect && !url.includes("/login")) {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+      const path = typeof window !== "undefined" ? window.location.pathname : "";
+
+      if (path.startsWith("/dashboard")) {
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }
     }
+
     return Promise.reject(error);
   }
 );

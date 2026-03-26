@@ -133,6 +133,7 @@ const Signals = () => {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [selectedSignal, setSelectedSignal] = useState(null);
   const [lastSingleResult, setLastSingleResult] = useState(null);
   const [lastBatchResults, setLastBatchResults] = useState([]);
@@ -156,6 +157,7 @@ const Signals = () => {
   const fetchAll = async () => {
     if (!userId) return;
     try {
+      setErrorMessage('');
       const [signalsData, statsData] = await Promise.all([
         getUserSignals(userId, 50),
         getSignalStats(userId),
@@ -170,6 +172,7 @@ const Signals = () => {
     } catch (err) {
       console.error('Fetch error:', err);
       toast.error('Failed to load signals');
+      setErrorMessage('Failed to load signals. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -204,6 +207,7 @@ const Signals = () => {
       await fetchAll();
     } catch (err) {
       toast.error(`Extraction failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      setErrorMessage('Extraction failed. Please try again.');
     } finally {
       setExtracting(false);
     }
@@ -231,6 +235,7 @@ const Signals = () => {
       await fetchAll();
     } catch (err) {
       toast.error(`Batch failed: ${err.response?.data?.detail || err.message}`, { id: t });
+      setErrorMessage('Batch failed. Please try again.');
     } finally {
       setExtracting(false);
     }
@@ -246,6 +251,7 @@ const Signals = () => {
       if (selectedSignal?.signal_id === signalId) setSelectedSignal(null);
     } catch {
       toast.error('Failed to purge signal');
+      setErrorMessage('Failed to delete signal. Please try again.');
     }
   };
 
@@ -263,9 +269,17 @@ const Signals = () => {
   const neutralCount = stats?.by_direction?.NEUTRAL || 0;
   const avgConf = Math.round((stats?.average_confidence || 0) * 100);
 
-  // Filter uses direction from DB rows
-  const filtered = signals.filter(s =>
-    filter === 'all' || s.direction === filter
+  const normalizeDirection = (value) => {
+    const raw = (value || '').toString().trim().toUpperCase();
+    if (raw === 'BUY') return 'LONG';
+    if (raw === 'SELL') return 'SHORT';
+    return raw;
+  };
+
+  // Filter uses direction from DB rows (support direction/primary_direction + BUY/SELL)
+  const filtered = signals.filter((s) =>
+    filter === 'all' ||
+    normalizeDirection(s.direction || s.primary_direction) === filter
   );
 
   return (
@@ -305,6 +319,12 @@ const Signals = () => {
           </div>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
@@ -658,7 +678,7 @@ const Signals = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-transparent z-10 max-h-[90vh] overflow-y-auto custom-scrollbar"
+              className="relative w-full max-w-4xl bg-transparent z-10 max-h-[90vh] overflow-y-auto custom-scrollbar"
             >
               <button
                 onClick={() => setSelectedSignal(null)}

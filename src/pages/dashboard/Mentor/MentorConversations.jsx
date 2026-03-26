@@ -24,6 +24,7 @@ const GOLD_LIGHT = '#FFD700';
 const MentorConversations = () => {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
@@ -42,6 +43,7 @@ const MentorConversations = () => {
 
     try {
       setLoading(true);
+      setErrorMessage("");
       const data = await getConversations(userId);
       const normalized = (Array.isArray(data) ? data : []).filter(
         (conversation) => conversation?.conversation_id
@@ -53,6 +55,7 @@ const MentorConversations = () => {
       );
     } catch (error) {
       console.error('Error fetching mentor conversations:', error);
+      setErrorMessage("Failed to load conversations. Please try again.");
 
       const cached = localStorage.getItem(getMentorConversationCacheKey(userId));
       if (cached) {
@@ -82,7 +85,9 @@ const MentorConversations = () => {
     try {
       await deleteConversation(deleteModal.id, userId);
       toast.success('Conversation deleted', { id: loadingToast });
-      fetchConversations();
+      setConversations((prev) =>
+        prev.filter((c) => c.conversation_id !== deleteModal.id)
+      );
       setDeleteModal({ open: false, id: null });
     } catch (error) {
       console.error('Error deleting conversation:', error);
@@ -147,6 +152,12 @@ const MentorConversations = () => {
           <FiPlus size={16} /> New Chat
         </button>
       </div>
+
+      {errorMessage && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+          {errorMessage}
+        </div>
+      )}
 
       <Motion.div
         variants={container}

@@ -89,6 +89,7 @@ function App() {
           <Route path="/transcript" element={<TranscriptPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
           <Route path="/strategy" element={<StrategyLabPage />} />
+          <Route path="/codegen" element={<StrategyLabPage />} />
 
           <Route path="/mentor" element={<MentorPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
