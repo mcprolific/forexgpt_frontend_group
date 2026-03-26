@@ -119,6 +119,8 @@ export const resendConfirmationAPI = async (email) => {
 export const forgotPasswordAPI = async (email) => {
   const response = await postToFirstAvailable(
     [
+      { url: "/password-reset", data: { email } },
+      { url: "/auth/password-reset", data: { email } },
       { url: "/forgot-password", data: { email } },
       { url: "/auth/forgot-password", data: { email } },
       { url: "/request-password-reset", data: { email } },
