@@ -5,10 +5,11 @@ import axiosInstance from "./axiosInstance";
 // ==============================
 export const askMentor = async (message, conversationId, userId) => {
   try {
-    const res = await axiosInstance.post("/mentor/ask", {
+    const endpoint = conversationId
+      ? `/mentor/conversations/${conversationId}/messages`
+      : "/mentor/conversations";
+    const res = await axiosInstance.post(endpoint, {
       message,
-      conversation_id: conversationId,
-      user_id: userId
     });
     return res.data;
   } catch (error) {
@@ -22,7 +23,7 @@ export const askMentor = async (message, conversationId, userId) => {
 // ==============================
 export const getConversations = async (userId) => {
   try {
-    const res = await axiosInstance.get(`/mentor/conversations/${userId}`);
+    const res = await axiosInstance.get(`/mentor/conversations`);
     return res.data;
   } catch (error) {
     console.error("Get Conversations Error:", error);
@@ -36,7 +37,7 @@ export const getConversations = async (userId) => {
 export const getConversationHistory = async (conversationId, userId) => {
   try {
     const res = await axiosInstance.get(
-      `/mentor/conversations/${userId}/${conversationId}`
+      `/mentor/conversations/${conversationId}/messages`
     );
     return res.data;
   } catch (error) {
@@ -51,7 +52,7 @@ export const getConversationHistory = async (conversationId, userId) => {
 export const deleteConversation = async (conversationId, userId) => {
   try {
     const res = await axiosInstance.delete(
-      `/mentor/conversations/${userId}/${conversationId}`
+      `/mentor/conversations/${conversationId}`
     );
     return res.data;
   } catch (error) {
@@ -72,3 +73,5 @@ export const analyzeBacktest = async (payload) => {
     throw error;
   }
 };
+
+

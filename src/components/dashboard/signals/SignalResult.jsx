@@ -1,8 +1,10 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const SignalResult = ({ signal, user }) => {
     if (!signal) return null;
+    const navigate = useNavigate();
 
     // Unified Mapping for SignalResponse (live) vs Database Row (saved)
     const data = {
@@ -23,17 +25,58 @@ const SignalResult = ({ signal, user }) => {
     const labelWidth = 17;
     const pad = (label) => label.padEnd(labelWidth, ' ');
 
+    const handleLearnAboutSignal = () => {
+        const reasoning = signal.reasoning || 'this signal was detected';
+        const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
+        if (user?.id) {
+            navigate('/dashboard/mentor/messages/new', {
+                state: {
+                    fromSignals: true,
+                    prefilledQuestion: `Explain why ${reasoning}. How does this affect ${pair}?`
+                }
+            });
+            return;
+        }
+        navigate('/mentor', {
+            state: {
+                fromSignals: true,
+                prefilledQuestion: `Explain why ${reasoning}. How does this affect ${pair}?`
+            }
+        });
+    };
+
+    const handleGenerateStrategy = () => {
+        const confidence = signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : 'a suitable threshold';
+        const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
+        const direction = (signal.direction || signal.primary_direction || 'NEUTRAL').toUpperCase();
+        if (user?.id) {
+            navigate('/dashboard/codegen/session/new', {
+                state: {
+                    fromSignals: true,
+                    prefilledDescription: `Create a strategy that trades ${pair} ${direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidence}.`
+                }
+            });
+            return;
+        }
+        navigate('/codegen', {
+            state: {
+                fromSignals: true,
+                prefilledDescription: `Create a strategy that trades ${pair} ${direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidence}.`
+            }
+        });
+    };
+
     return (
         <Motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="font-mono text-[12px] leading-relaxed text-gray-400 bg-[#050505] border border-white/5 rounded-3xl p-8 md:p-12 shadow-2xl relative overflow-hidden"
+            className="font-mono text-[12px] leading-relaxed text-gray-400 bg-[#050505] border border-white/5 rounded-3xl p-8 md:p-12 shadow-2xl relative overflow-hidden w-full max-w-[calc(100vw-1rem)] min-w-0 break-all sm:break-normal md:min-w-[600px]"
         >
             {/* Subtle scanline effect */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50 bg-[length:100%_2px,3px_100%]" />
 
-            <div className="relative z-10 whitespace-pre">
-                <div className="text-white font-black tracking-[0.2em] uppercase mb-8">
+            <div className="relative z-10 whitespace-normal">
+                <div className="text-white font-black tracking-[0.2em] uppercase mb-8 text-center sm:text-left">
                     {'                '}SIGNAL EXTRACTION RESULT
                 </div>
 
@@ -54,9 +97,28 @@ const SignalResult = ({ signal, user }) => {
                     {'                    '}Reasoning
                 </div>
 
-                <div className="mb-10 text-gray-300 whitespace-pre-wrap leading-relaxed max-w-lg">
+                <div className="mb-10 text-gray-300 whitespace-pre-wrap leading-relaxed max-w-none">
                     {data.reasoning}
                 </div>
+
+                {signal.signal !== false && (
+                    <div className="mb-10 flex flex-wrap gap-3">
+                        <button
+                            type="button"
+                            onClick={handleLearnAboutSignal}
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-black uppercase tracking-widest text-gray-200 hover:text-yellow-500 hover:border-yellow-500/40 transition cursor-pointer"
+                        >
+                            Learn About This Signal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleGenerateStrategy}
+                            className="px-4 py-2 rounded-lg bg-yellow-500 text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition cursor-pointer"
+                        >
+                            Generate Strategy Based On This
+                        </button>
+                    </div>
+                )}
 
                 <div className="text-white font-black tracking-widest uppercase mb-6">
                     {'                '}Signal Information

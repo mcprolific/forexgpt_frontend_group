@@ -37,6 +37,7 @@ const CodeGeneration = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // ── Improvement mode state ─────────────────────────────────
   const [improvementMode, setImprovementMode] = useState(false);
@@ -49,6 +50,7 @@ const CodeGeneration = () => {
 
   // ── Latest generated code (for Test Strategy button) ──────
   const [latestStrategyDesc, setLatestStrategyDesc] = useState('');
+  const [latestGeneratedCode, setLatestGeneratedCode] = useState(null);
 
   // ── Copy feedback state ────────────────────────────────────
   const [copiedId, setCopiedId] = useState(null);
@@ -74,6 +76,10 @@ const CodeGeneration = () => {
       }
     }
 
+    if (state.prefilledDescription) {
+      setNewMessage(state.prefilledDescription);
+    }
+
     if (state.mode === 'improve') {
       setImprovementMode(true);
       setOriginalCode(state.originalCode || null);
@@ -89,23 +95,32 @@ const CodeGeneration = () => {
         setLoading(false);
         return;
       }
-      // Skip re-fetch when we just navigated here from a new conversation
-      // (messages are already in state from the send flow)
       if (location.state?.skipFetch) {
         setLoading(false);
         return;
       }
+      if (!conversationId || !user?.id) {
+        setLoading(false);
+        return;
+      }
+      // If we already have messages in state, avoid flashing the spinner again.
+      if (messages.length) setLoading(false);
       try {
+        setErrorMessage('');
         const res = await getCodeConversationHistory(conversationId, user.id);
-        setMessages(res.history || []);
+        const history = Array.isArray(res?.history) ? res.history : [];
+        if (history.length) {
+          setMessages((prev) => (prev.length ? prev : history));
+        }
       } catch (error) {
         console.error('Error fetching logic history:', error);
+        setErrorMessage('Failed to load conversation. Please try again.');
       } finally {
         setLoading(false);
       }
     };
     fetchHistory();
-  }, [conversationId, user?.id]);
+  }, [conversationId, user?.id, location.state, messages.length]);
 
   // ── Auto scroll ────────────────────────────────────────────
   useEffect(() => {
@@ -155,10 +170,12 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-          setLatestGeneratedCode(response.code);
           // Always append the assistant reply first so the user sees it,
           // then update the URL if this was a brand-new conversation.
           setMessages((prev) => [...prev, assistantMsg]);
+          if (assistantMsg.code) {
+            setLatestGeneratedCode(assistantMsg.code);
+          }
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
@@ -168,6 +185,7 @@ const CodeGeneration = () => {
         }
       } else {
         // Response came back but was missing expected fields
+        setErrorMessage('The server returned an unexpected response.');
         setMessages((prev) => [
           ...prev,
           {
@@ -184,6 +202,7 @@ const CodeGeneration = () => {
         error?.response?.data?.message ||
         error?.message ||
         'Failed to generate code. Please try again.';
+      setErrorMessage(errMsg);
       setMessages((prev) => [
         ...prev,
         {
@@ -238,6 +257,9 @@ const CodeGeneration = () => {
 
         // FIX: Always add assistant message before navigating
         setMessages((prev) => [...prev, assistantMsg]);
+        if (assistantMsg.code) {
+          setLatestGeneratedCode(assistantMsg.code);
+        }
 
         if (conversationId === 'new' && response.conversation_id) {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
@@ -272,7 +294,7 @@ const CodeGeneration = () => {
   };
 
   // ── Render message content ─────────────────────────────────
-  const renderContent = (content, code, isImproved = false, messageId) => (
+  const renderContent = (content, code, isImproved = false, messageId, role) => (
     <div className="space-y-4">
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
@@ -364,7 +386,7 @@ const CodeGeneration = () => {
       )}
 
       {/* FIX: Show warning if assistant responded but no code was returned */}
-      {!code && content && (
+      {!code && content && role === 'assistant' && (
         <div className="flex items-center gap-2 text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-2">
           <FiAlertCircle size={12} />
           No code was returned for this response.
@@ -490,6 +512,11 @@ const CodeGeneration = () => {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        {errorMessage && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+            {errorMessage}
+          </div>
+        )}
         {messages.length === 0 && !improvementMode ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <FiCode size={48} className="text-yellow-500 mb-4" />
@@ -517,7 +544,7 @@ const CodeGeneration = () => {
                   </div>
                 )}
 
-                {renderContent(message.content, message.code, message.isImproved, message.id || idx)}
+                {renderContent(message.content, message.code, message.isImproved, message.id || idx, message.role)}
 
                 <div
                   className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
