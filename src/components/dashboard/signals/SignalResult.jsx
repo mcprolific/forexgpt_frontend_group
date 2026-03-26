@@ -1,12 +1,10 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
 
 const SignalResult = ({ signal, user }) => {
     const navigate = useNavigate();
     if (!signal) return null;
-    const navigate = useNavigate();
 
     // Unified Mapping for SignalResponse (live) vs Database Row (saved)
     const data = {
@@ -67,27 +65,6 @@ const SignalResult = ({ signal, user }) => {
             }
         });
     };
-    const signalDetected = signal.signal !== false;
-    const confidencePct = signal.confidence != null ? Math.round(signal.confidence * 100) : null;
-
-    const handleLearnAboutSignal = () => {
-        navigate('/dashboard/mentor/messages/new', {
-            state: {
-                fromSignals: true,
-                prefilledQuestion: `Explain why ${data.reasoning || 'this signal was detected'}. How does this affect ${data.pair}?`,
-            },
-        });
-    };
-
-    const handleGenerateStrategy = () => {
-        navigate('/dashboard/codegen/session/new', {
-            state: {
-                fromSignals: true,
-                prefilledDescription: `Create a strategy that trades ${data.pair} ${data.direction} when similar forex exposure signals appear. Use confidence threshold of ${confidencePct != null ? `${confidencePct}%` : 'a suitable threshold'}.`,
-            },
-        });
-    };
-
     return (
         <Motion.div
             initial={{ opacity: 0, scale: 0.98 }}

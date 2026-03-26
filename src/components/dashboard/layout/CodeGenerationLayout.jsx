@@ -12,9 +12,14 @@ import {
 } from 'react-icons/fi';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from 'react-redux';
-import { getConversations, deleteConversation } from '../../../services/codeGenService';
+import {
+  getConversations,
+  deleteConversation,
+  getCodeGenConversationCacheKey,
+} from '../../../services/codeGenService';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import toast from 'react-hot-toast';
+import { formatLongDate, formatLongDateTime } from '../../../utils/formatters';
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -28,14 +33,38 @@ const CodeGenerationLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
+  const userId = user?.user_id || user?.id;
 
   const fetchSessions = async () => {
-    if (!user?.id) return;
+    if (!userId) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
-      const data = await getConversations(user.id);
-      setSessions(data || []);
+      const data = await getConversations(userId);
+      const normalized = (Array.isArray(data) ? data : []).filter(
+        (session) => session?.conversation_id
+      );
+      setSessions(normalized);
     } catch (error) {
       console.error("Error fetching logic sessions sidebar:", error);
+      const cached = localStorage.getItem(getCodeGenConversationCacheKey(userId));
+
+      if (!cached) return;
+
+      try {
+        const parsed = JSON.parse(cached);
+        setSessions(
+          (Array.isArray(parsed) ? parsed : []).filter(
+            (session) => session?.conversation_id
+          )
+        );
+      } catch (cacheError) {
+        console.error("Error parsing code generation sidebar cache:", cacheError);
+      }
     } finally {
       setLoading(false);
     }
@@ -43,25 +72,14 @@ const CodeGenerationLayout = () => {
 
   useEffect(() => {
     fetchSessions();
-  }, [user?.id, location.pathname]);
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  }, [userId, location.pathname]);
 
   const filteredSessions = sessions.filter(sess =>
     (sess.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const groupedSessions = filteredSessions.reduce((groups, sess) => {
-    const dateKey = formatDate(sess.created_at);
+    const dateKey = formatLongDate(sess.created_at);
     if (!groups[dateKey]) groups[dateKey] = [];
     groups[dateKey].push(sess);
     return groups;
@@ -72,11 +90,11 @@ const CodeGenerationLayout = () => {
   };
 
   const handleDelete = async () => {
-    if (!deleteModal.id || !user?.id) return;
+    if (!deleteModal.id || !userId) return;
 
     const loadingToast = toast.loading("Deleting session...");
     try {
-      await deleteConversation(deleteModal.id, user.id);
+      await deleteConversation(deleteModal.id, userId);
       toast.success("Session deleted", { id: loadingToast });
       fetchSessions();
 
@@ -104,7 +122,7 @@ const CodeGenerationLayout = () => {
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden"
+          className="absolute inset-0 bg-black/60 z-30 md:hidden cursor-pointer"
         />
       )}
 
@@ -205,7 +223,7 @@ const CodeGenerationLayout = () => {
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-[10px] text-gray-600 font-mono uppercase tracking-tighter">
-                                {new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {formatLongDateTime(session.created_at)}
                               </span>
                             </div>
                           </div>

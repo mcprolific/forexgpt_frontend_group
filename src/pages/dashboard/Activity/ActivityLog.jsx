@@ -1,20 +1,38 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { FiClock, FiActivity, FiZap, FiMessageCircle, FiTrendingUp } from 'react-icons/fi';
-import { getActivityLogs } from '../../../services/userService';
+import {
+  FiActivity,
+  FiClock,
+  FiCode,
+  FiMessageCircle,
+  FiTrendingUp,
+  FiUser,
+  FiZap,
+} from 'react-icons/fi';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getUnifiedActivityLogs } from '../../../services/activityService';
+import { formatLongDateTime } from '../../../utils/formatters';
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
 
 const ActivityLog = () => {
+  const { user } = useAuth();
+  const userId = user?.user_id || user?.id;
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLogs = async () => {
+      if (!userId) {
+        setLogs([]);
+        setLoading(false);
+        return;
+      }
+
       try {
-        const data = await getActivityLogs(50);
+        const data = await getUnifiedActivityLogs(userId, 50);
         setLogs(data);
       } catch (error) {
         console.error("Error fetching activity logs:", error);
@@ -23,7 +41,7 @@ const ActivityLog = () => {
       }
     };
     fetchLogs();
-  }, []);
+  }, [userId]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -35,10 +53,18 @@ const ActivityLog = () => {
     show: { opacity: 1, y: 0 }
   };
 
-  const getActivityIcon = (action) => {
-    if (action.includes('Signal')) return <FiTrendingUp className="text-yellow-500" />;
-    if (action.includes('Mentor') || action.includes('Question')) return <FiMessageCircle className="text-yellow-500" />;
-    if (action.includes('Backtest')) return <FiActivity className="text-yellow-500" />;
+  const getActivityIcon = (log) => {
+    const value = `${log?.entity_type || ''} ${log?.action || ''}`.toLowerCase();
+
+    if (value.includes('signal')) return <FiTrendingUp className="text-yellow-500" />;
+    if (value.includes('mentor') || value.includes('question') || value.includes('conversation')) {
+      return <FiMessageCircle className="text-yellow-500" />;
+    }
+    if (value.includes('backtest')) return <FiActivity className="text-yellow-500" />;
+    if (value.includes('code')) return <FiCode className="text-yellow-500" />;
+    if (value.includes('sign') || value.includes('auth') || value.includes('login')) {
+      return <FiUser className="text-yellow-500" />;
+    }
     return <FiZap className="text-yellow-500" />;
   };
 
@@ -81,17 +107,21 @@ const ActivityLog = () => {
             <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-yellow-500/0 via-yellow-500/40 to-yellow-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
 
             <div className="h-12 w-12 rounded-xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              {getActivityIcon(log.action)}
+              {getActivityIcon(log)}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-4">
-                <p className="font-bold text-gray-200 group-hover:text-yellow-500 transition-colors truncate">{log.action}</p>
+                <p className="font-bold text-gray-200 group-hover:text-yellow-500 transition-colors truncate">
+                  {log.title || log.action}
+                </p>
                 <span className="text-[10px] text-gray-600 whitespace-nowrap font-black uppercase tracking-tighter">
-                  {new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {formatLongDateTime(log.created_at)}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Transaction verified on institutional compute grid.</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {log.details || 'Activity recorded successfully.'}
+              </p>
             </div>
           </Motion.div>
         ))}

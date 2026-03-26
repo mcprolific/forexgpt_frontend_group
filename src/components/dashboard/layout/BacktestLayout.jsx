@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, Link, useNavigate, useParams } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   FiBarChart2, FiPlus, FiMoreVertical, FiTrash2,
   FiMenu, FiX, FiClock, FiCheckCircle, FiXCircle,
@@ -20,17 +20,26 @@ const BacktestLayout = () => {
   const [loading, setLoading] = useState(false);
   const { backtestId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const userId = user?.user_id || user?.id;
 
   useEffect(() => {
-    if (user) loadHistory();
-  }, [user]); // Only reload if user changes or loadHistory is called manually
+    if (userId) {
+      loadHistory();
+      return;
+    }
+
+    setBacktests([]);
+  }, [userId, location.pathname]);
 
   const loadHistory = async () => {
     setLoading(true);
     try {
-      const uid = user?.user_id || user?.id;
-      if (!uid) return;
-      const data = await getBacktestResults(uid, 20, 0);
+      if (!userId) {
+        setBacktests([]);
+        return;
+      }
+      const data = await getBacktestResults(userId, 20, 0);
       setBacktests(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
@@ -45,7 +54,7 @@ const BacktestLayout = () => {
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden"
+          className="absolute inset-0 bg-black/60 z-30 md:hidden cursor-pointer"
         />
       )}
 
@@ -117,7 +126,7 @@ const BacktestLayout = () => {
               <div className="space-y-1.5">
                 {backtests.map(bt => {
                   const isPos = (bt.total_return_pct ?? 0) >= 0;
-                  const isActive = bt.id === backtestId;
+                  const isActive = String(bt.id) === String(backtestId);
                   return (
                     <button
                       key={bt.id}

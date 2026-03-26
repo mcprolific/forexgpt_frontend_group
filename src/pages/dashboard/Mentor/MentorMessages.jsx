@@ -20,6 +20,7 @@ import {
   getConversationHistory,
 } from '../../../services/mentorService';
 import toast from 'react-hot-toast';
+import { formatLongDateTime } from '../../../utils/formatters';
 
 const STRATEGY_PATTERNS = [
   { label: 'mean reversion', regex: /mean\s*reversion/i },
@@ -33,6 +34,21 @@ const STRATEGY_PATTERNS = [
 
 const detectStrategyType = (text) =>
   STRATEGY_PATTERNS.find(({ regex }) => regex.test(text || ''))?.label ?? null;
+
+const getDraftKey = (userId) => `fgpt_mentor_draft_${userId || 'anon'}`;
+const getLastConversationKey = (userId) =>
+  `fgpt_mentor_last_conversation_${userId || 'anon'}`;
+
+const parseStoredMessages = (raw) => {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 const MentorMessages = () => {
   const { conversationId } = useParams();
@@ -53,31 +69,36 @@ const MentorMessages = () => {
 
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!conversationId || conversationId === 'new' || !userId) {
+      if (!conversationId || !userId) {
         setMessages([]);
         setLoading(false);
         return;
       }
 
+      if (conversationId === 'new') {
+        setMessages(
+          parseStoredMessages(localStorage.getItem(getDraftKey(userId)))
+        );
+        setLoading(false);
+        return;
+      }
+
       const cacheKey = `fgpt_mentor_history_${conversationId}`;
+      const cachedHistory = parseStoredMessages(localStorage.getItem(cacheKey));
 
       try {
         setErrorMessage('');
         const res = await getConversationHistory(conversationId, userId);
-        const history = res.history || [];
-        setMessages(history);
-        localStorage.setItem(cacheKey, JSON.stringify(history));
+        const history = Array.isArray(res.history) ? res.history : [];
+        const nextHistory = history.length > 0 ? history : cachedHistory;
+        setMessages(nextHistory);
+        localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
+        localStorage.setItem(getLastConversationKey(userId), conversationId);
       } catch (error) {
         console.error('Failed to load history:', error);
 
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            setMessages(JSON.parse(cached));
-          } catch (cacheError) {
-            console.error('Cache parse error:', cacheError);
-            toast.error('Failed to load history');
-          }
+        if (cachedHistory.length > 0) {
+          setMessages(cachedHistory);
         } else {
           toast.error('Failed to load history');
         }
@@ -89,6 +110,19 @@ const MentorMessages = () => {
 
     fetchHistory();
   }, [conversationId, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const draftKey = getDraftKey(userId);
+
+    if (conversationId === 'new') {
+      localStorage.setItem(draftKey, JSON.stringify(messages));
+      return;
+    }
+
+    localStorage.removeItem(draftKey);
+  }, [conversationId, messages, userId]);
 
   useEffect(() => {
     if (
@@ -225,22 +259,43 @@ const MentorMessages = () => {
         userId
       );
 
+      const assistantMessage = {
+        id: `${Date.now()}-assistant`,
+        role: 'assistant',
+        content: response?.response || 'No response returned.',
+        timestamp: response?.timestamp || new Date().toISOString(),
+      };
+
       if (conversationId === 'new' && response?.conversation_id) {
+        const nextConversationId = response.conversation_id;
+        setMessages((prev) => {
+          const next = [...prev, assistantMessage];
+          localStorage.setItem(
+            `fgpt_mentor_history_${nextConversationId}`,
+            JSON.stringify(next)
+          );
+          return next;
+        });
+        localStorage.setItem(
+          getLastConversationKey(userId),
+          nextConversationId
+        );
+        localStorage.removeItem(getDraftKey(userId));
         navigate(`/dashboard/mentor/messages/${response.conversation_id}`, {
           replace: true,
         });
         return;
       }
 
+      if (conversationId === 'new') {
+        setMessages((prev) => [...prev, assistantMessage]);
+        return;
+      }
+
       setMessages((prev) => {
         const next = [
           ...prev,
-          {
-            id: `${Date.now()}-assistant`,
-            role: 'assistant',
-            content: response?.response || 'No response returned.',
-            timestamp: response?.timestamp || new Date().toISOString(),
-          },
+          assistantMessage,
         ];
 
         if (conversationId && conversationId !== 'new') {
@@ -260,7 +315,9 @@ const MentorMessages = () => {
       setMessages((prev) => {
         const next = prev.filter((message) => message.id !== userMsg.id);
 
-        if (conversationId && conversationId !== 'new') {
+        if (conversationId === 'new') {
+          localStorage.setItem(getDraftKey(userId), JSON.stringify(next));
+        } else if (conversationId) {
           localStorage.setItem(
             `fgpt_mentor_history_${conversationId}`,
             JSON.stringify(next)
@@ -478,12 +535,7 @@ const MentorMessages = () => {
                     }`}
                   >
                     <span>
-                      {message.timestamp
-                        ? new Date(message.timestamp).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : ''}
+                      {formatLongDateTime(message.timestamp)}
                     </span>
                     {message.role === 'assistant' && (
                       <div className="flex items-center gap-2">
