@@ -96,7 +96,7 @@ const SignalsLayout = () => {
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden"
+          className="absolute inset-0 bg-black/60 z-30 md:hidden cursor-pointer"
         />
       )}
 

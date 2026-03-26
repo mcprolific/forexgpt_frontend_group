@@ -1,11 +1,16 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getConversations, deleteConversation } from "../../../services/codeGenService";
+import {
+    getConversations,
+    deleteConversation,
+    getCodeGenConversationCacheKey,
+} from "../../../services/codeGenService";
 import { FiCode, FiPlus, FiClock, FiChevronRight, FiTrash2, FiCpu } from "react-icons/fi";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useSelector } from "react-redux";
 import ConfirmModal from "../../../components/ui/ConfirmModal";
 import toast from "react-hot-toast";
+import { formatLongDateTime } from "../../../utils/formatters";
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -16,6 +21,7 @@ const CodeGenSessions = () => {
     const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
     const navigate = useNavigate();
     const { user } = useSelector((state) => state.auth);
+    const userId = user?.user_id || user?.id;
 
     const handleNewSession = () => {
         navigate('/dashboard/codegen/session/new');
@@ -23,32 +29,47 @@ const CodeGenSessions = () => {
 
     // FIX: Wrapped in useCallback so it can be safely included in useEffect deps
     const fetchSessions = useCallback(async () => {
-        if (!user?.id) {
+        if (!userId) {
             setLoading(false);
             return;
         }
         try {
             setLoading(true);
-            const data = await getConversations(user.id);
-            // FIX: Filter out any sessions with missing conversation_id to prevent broken navigation
+            const data = await getConversations(userId);
             const validSessions = (data || []).filter(
                 (session) => session?.conversation_id
             );
             setSessions(validSessions);
         } catch (error) {
             console.error("Error fetching code generation history:", error);
+            const cached = localStorage.getItem(getCodeGenConversationCacheKey(userId));
+
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    setSessions(
+                        (Array.isArray(parsed) ? parsed : []).filter(
+                            (session) => session?.conversation_id
+                        )
+                    );
+                    return;
+                } catch (cacheError) {
+                    console.error("Error parsing code generation sessions cache:", cacheError);
+                }
+            }
+
             toast.error("Failed to fetch sessions");
         } finally {
             setLoading(false);
         }
-    }, [user?.id]);
+    }, [userId]);
 
     const handleDelete = async () => {
-        if (!deleteModal.id || !user?.id) return;
+        if (!deleteModal.id || !userId) return;
 
         const loadingToast = toast.loading("Deleting logic session...");
         try {
-            await deleteConversation(deleteModal.id, user.id);
+            await deleteConversation(deleteModal.id, userId);
             toast.success("Session deleted successfully", { id: loadingToast });
             fetchSessions();
             setDeleteModal({ open: false, id: null });
@@ -141,7 +162,7 @@ const CodeGenSessions = () => {
                                         </h4>
                                         <span className="text-[10px] text-gray-600 whitespace-nowrap font-black uppercase tracking-tighter flex items-center gap-1">
                                             <FiClock size={10} />
-                                            {new Date(session.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            {formatLongDateTime(session.created_at)}
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-1 truncate max-w-xl">
