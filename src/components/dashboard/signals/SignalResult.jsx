@@ -1,12 +1,10 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
 
 const SignalResult = ({ signal, user }) => {
     const navigate = useNavigate();
     if (!signal) return null;
-    const navigate = useNavigate();
 
     // Unified Mapping for SignalResponse (live) vs Database Row (saved)
     const data = {
@@ -14,7 +12,7 @@ const SignalResult = ({ signal, user }) => {
         pair:       signal.currency_pair  || signal.base_currency      || 'N/A',
         detected:   signal.signal === false ? 'NO' : 'YES',
         direction: (signal.direction      || signal.primary_direction  || 'NEUTRAL').toUpperCase(),
-        confidence: signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : '—',
+        confidence: signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : '�',
         magnitude:  signal.magnitude      || signal.primary_strength   || 'N/A',
         horizon:    signal.time_horizon   || signal.source_type        || 'N/A',
         reasoning:  signal.reasoning      || 'No further analysis available.',
@@ -29,7 +27,7 @@ const SignalResult = ({ signal, user }) => {
 
     const confidencePct = signal.confidence != null ? Math.round(signal.confidence * 100) : null;
 
-    // ── Navigate to Mentor — with auth guard
+    // Navigate to Mentor with auth guard
     const handleLearnAboutSignal = () => {
         const destination = user?.id
             ? '/dashboard/mentor/messages/new'
@@ -43,7 +41,7 @@ const SignalResult = ({ signal, user }) => {
         });
     };
 
-    // ── Navigate to CodeGen — with auth guard 
+    // Navigate to CodeGen with auth guard
     const handleGenerateStrategy = () => {
         const destination = user?.id
             ? '/dashboard/codegen/session/new'
