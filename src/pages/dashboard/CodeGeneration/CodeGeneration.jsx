@@ -24,9 +24,10 @@ import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   getCodeConversationHistory,
   generateCode as askArchitect,
-  // FIX: Moved improveStrategy to top-level import — no longer dynamically imported
   improveStrategy,
+  getCodeGenHistoryCacheKey,
 } from '../../../services/codeGenService';
+import { formatLongDateTime } from '../../../utils/formatters';
 
 const sanitizeFileName = (value) =>
   (value || 'strategy')
@@ -44,6 +45,19 @@ const formatSummaryMetric = (value, decimals = 2) =>
   value != null && value !== ''
     ? Number(value).toFixed(decimals)
     : 'N/A';
+
+const getDraftKey = (userId) => `fgpt_codegen_draft_${userId || 'anon'}`;
+
+const parseStoredMessages = (raw) => {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 const CodeGeneration = () => {
   const { conversationId } = useParams();
@@ -74,6 +88,7 @@ const CodeGeneration = () => {
 
   const scrollRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
+  const userId = user?.user_id || user?.id;
 
   // ── Handle incoming navigation state ──────────────────────
   useEffect(() => {
@@ -93,11 +108,7 @@ const CodeGeneration = () => {
       }
     }
 
-<<<<<<< HEAD
-    if (state.prefilledDescription) {
-=======
     if (state.fromSignals && state.prefilledDescription) {
->>>>>>> c67ada9156c0428cb612866da019267b08460d66
       setNewMessage(state.prefilledDescription);
     }
 
@@ -112,7 +123,16 @@ const CodeGeneration = () => {
   // ── Fetch conversation history ─────────────────────────────
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!conversationId || !userId) {
+        setMessages([]);
+        setLoading(false);
+        return;
+      }
+
       if (conversationId === 'new') {
+        setMessages(
+          parseStoredMessages(localStorage.getItem(getDraftKey(userId)))
+        );
         setLoading(false);
         return;
       }
@@ -120,28 +140,49 @@ const CodeGeneration = () => {
         setLoading(false);
         return;
       }
-      if (!conversationId || !user?.id) {
-        setLoading(false);
-        return;
-      }
-      // If we already have messages in state, avoid flashing the spinner again.
-      if (messages.length) setLoading(false);
+
+      const cacheKey = getCodeGenHistoryCacheKey(conversationId);
+      const cachedHistory = parseStoredMessages(localStorage.getItem(cacheKey));
+
       try {
         setErrorMessage('');
-        const res = await getCodeConversationHistory(conversationId, user.id);
-        const history = Array.isArray(res?.history) ? res.history : [];
-        if (history.length) {
-          setMessages((prev) => (prev.length ? prev : history));
-        }
+        const res = await getCodeConversationHistory(conversationId, userId);
+        const history = Array.isArray(res.history) ? res.history : [];
+        const nextHistory = history.length > 0 ? history : cachedHistory;
+        setMessages(nextHistory);
+        localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
       } catch (error) {
         console.error('Error fetching logic history:', error);
+        if (cachedHistory.length > 0) {
+          setMessages(cachedHistory);
+        }
         setErrorMessage('Failed to load conversation. Please try again.');
       } finally {
         setLoading(false);
       }
     };
     fetchHistory();
-  }, [conversationId, user?.id, location.state, messages.length]);
+  }, [conversationId, userId, location.state]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const draftKey = getDraftKey(userId);
+
+    if (conversationId === 'new') {
+      localStorage.setItem(draftKey, JSON.stringify(messages));
+      return;
+    }
+
+    localStorage.removeItem(draftKey);
+
+    if (conversationId) {
+      localStorage.setItem(
+        getCodeGenHistoryCacheKey(conversationId),
+        JSON.stringify(messages)
+      );
+    }
+  }, [conversationId, messages, userId]);
 
   // ── Auto scroll ────────────────────────────────────────────
   useEffect(() => {
@@ -174,7 +215,7 @@ const CodeGeneration = () => {
 
   // ── Send message (initial generation) ─────────────────────
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending || !user?.id) return;
+    if (!newMessage.trim() || sending || !userId) return;
 
     const userContent = newMessage;
     setNewMessage('');
@@ -187,13 +228,26 @@ const CodeGeneration = () => {
       content: userContent,
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+
+      if (conversationId === 'new') {
+        localStorage.setItem(getDraftKey(userId), JSON.stringify(next));
+      } else if (conversationId) {
+        localStorage.setItem(
+          getCodeGenHistoryCacheKey(conversationId),
+          JSON.stringify(next)
+        );
+      }
+
+      return next;
+    });
 
     try {
       const response = await askArchitect(
         userContent,
         conversationId === 'new' ? null : conversationId,
-        user.id
+        userId
       );
 
       if (response && response.conversation_id) {
@@ -206,20 +260,28 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-<<<<<<< HEAD
-          // Always append the assistant reply first so the user sees it,
-          // then update the URL if this was a brand-new conversation.
-          setMessages((prev) => [...prev, assistantMsg]);
-          if (assistantMsg.code) {
-            setLatestGeneratedCode(assistantMsg.code);
-          }
-=======
         // Always append the assistant reply first so the user sees it,
         // then update the URL if this was a brand-new conversation.
-        setMessages((prev) => [...prev, assistantMsg]);
->>>>>>> c67ada9156c0428cb612866da019267b08460d66
+        setMessages((prev) => {
+          const next = [...prev, assistantMsg];
+          const targetConversationId =
+            conversationId === 'new' ? response.conversation_id : conversationId;
+
+          if (targetConversationId) {
+            localStorage.setItem(
+              getCodeGenHistoryCacheKey(targetConversationId),
+              JSON.stringify(next)
+            );
+          }
+
+          return next;
+        });
+        if (assistantMsg.code) {
+          setLatestGeneratedCode(assistantMsg.code);
+        }
 
         if (conversationId === 'new') {
+          localStorage.removeItem(getDraftKey(userId));
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
             state: { skipFetch: true },
@@ -261,7 +323,7 @@ const CodeGeneration = () => {
 
   // ── Improvement generation ─────────────────────────────────
   const handleImproveStrategy = async () => {
-    if (sending || !user?.id || !originalCode) return;
+    if (sending || !userId || !originalCode) return;
 
     setSending(true);
 
@@ -276,7 +338,7 @@ const CodeGeneration = () => {
     try {
       // FIX: No longer dynamically imported — uses top-level import directly
       const response = await improveStrategy(
-        user.id,
+        userId,
         originalCode,
         backtestResults || {},
         mentorAnalysis || '',
@@ -298,14 +360,29 @@ const CodeGeneration = () => {
         setImprovementMode(false);
 
         // FIX: Always add assistant message before navigating
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) => {
+          const next = [...prev, assistantMsg];
+          const targetConversationId =
+            conversationId === 'new' ? response.conversation_id : conversationId;
+
+          if (targetConversationId) {
+            localStorage.setItem(
+              getCodeGenHistoryCacheKey(targetConversationId),
+              JSON.stringify(next)
+            );
+          }
+
+          return next;
+        });
         if (assistantMsg.code) {
           setLatestGeneratedCode(assistantMsg.code);
         }
 
         if (conversationId === 'new' && response.conversation_id) {
+          localStorage.removeItem(getDraftKey(userId));
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
+            state: { skipFetch: true },
           });
         }
       }
@@ -337,7 +414,13 @@ const CodeGeneration = () => {
   };
 
   // ── Render message content ─────────────────────────────────
-  const renderContent = (content, code, isImproved = false, messageId, role) => (
+  const renderContent = (
+    content,
+    code,
+    isImproved = false,
+    messageId,
+    role = 'assistant'
+  ) => (
     <div className="space-y-4">
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
@@ -429,7 +512,7 @@ const CodeGeneration = () => {
       )}
 
       {/* FIX: Show warning if assistant responded but no code was returned */}
-      {!code && content && role === 'assistant' && (
+      {role === 'assistant' && !code && content && (
         <div className="flex items-center gap-2 text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-2">
           <FiAlertCircle size={12} />
           No code was returned for this response.
@@ -606,16 +689,20 @@ const CodeGeneration = () => {
                   </div>
                 )}
 
-                {renderContent(message.content, message.code, message.isImproved, message.id || idx, message.role)}
+                {renderContent(
+                  message.content,
+                  message.code,
+                  message.isImproved,
+                  message.id || idx,
+                  message.role
+                )}
 
                 <div
                   className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
                     ${message.role === 'user' ? 'text-black/40' : 'text-gray-600'}`}
                 >
                   <span>
-                    {message.timestamp
-                      ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : ''}
+                    {formatLongDateTime(message.timestamp)}
                   </span>
                   {message.role === 'assistant' && (
                     <div className="flex items-center gap-2">

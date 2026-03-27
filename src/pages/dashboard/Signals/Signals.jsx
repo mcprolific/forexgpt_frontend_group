@@ -12,6 +12,7 @@ import {
   getUserSignals,
   getSignalStats,
   deleteSignal,
+  buildSignalStats,
 } from '../../../services/signalService';
 import SignalCard from '../../../components/dashboard/cards/SignalCard';
 import SignalResult from '../../../components/dashboard/signals/SignalResult';
@@ -162,8 +163,13 @@ const Signals = () => {
         getUserSignals(userId, 50),
         getSignalStats(userId),
       ]);
-      setSignals(signalsData || []);
-      setStats(statsData);
+      const nextSignals = Array.isArray(signalsData) ? signalsData : [];
+      setSignals(nextSignals);
+      setStats(
+        (statsData?.total_signals || 0) === 0 && nextSignals.length > 0
+          ? buildSignalStats(nextSignals)
+          : statsData
+      );
     } catch (err) {
       console.error('Fetch error:', err);
       toast.error('Failed to load signals');
@@ -558,11 +564,13 @@ const Signals = () => {
         {/* ── Right: Signals Stream ───────────────────────────────────────────── */}
         <div className="lg:col-span-7 space-y-5">
 
-          {/* Unsaved Results */}
+          {/* Latest Results */}
           {(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0)) && (
             <div className="rounded-[20px] border border-yellow-500/30 bg-yellow-500/5 p-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">Unsaved Results</h3>
+                <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
+                  {lastResultsSaved ? 'Latest Saved Results' : 'Unsaved Results'}
+                </h3>
                 <span className="text-[10px] font-black text-yellow-500/70">
                   {(lastBatchResults?.length || 0) + (lastSingleResult ? 1 : 0)}
                 </span>

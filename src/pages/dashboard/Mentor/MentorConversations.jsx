@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   deleteConversation,
   getConversations,
+  getMentorConversationCacheKey,
 } from '../../../services/mentorService';
 import {
   FiChevronRight,
@@ -15,6 +16,7 @@ import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import toast from 'react-hot-toast';
+import { formatLongDateTime } from '../../../utils/formatters';
 
 const GOLD = '#D4AF37';
 const GOLD_LIGHT = '#FFD700';
@@ -34,6 +36,7 @@ const MentorConversations = () => {
 
   const fetchConversations = async () => {
     if (!userId) {
+      setConversations([]);
       setLoading(false);
       return;
     }
@@ -42,19 +45,27 @@ const MentorConversations = () => {
       setLoading(true);
       setErrorMessage("");
       const data = await getConversations(userId);
-      setConversations(data);
+      const normalized = (Array.isArray(data) ? data : []).filter(
+        (conversation) => conversation?.conversation_id
+      );
+      setConversations(normalized);
       localStorage.setItem(
-        'fgpt_mentor_conversations',
-        JSON.stringify(data || [])
+        getMentorConversationCacheKey(userId),
+        JSON.stringify(normalized)
       );
     } catch (error) {
       console.error('Error fetching mentor conversations:', error);
       setErrorMessage("Failed to load conversations. Please try again.");
 
-      const cached = localStorage.getItem('fgpt_mentor_conversations');
+      const cached = localStorage.getItem(getMentorConversationCacheKey(userId));
       if (cached) {
         try {
-          setConversations(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          setConversations(
+            (Array.isArray(parsed) ? parsed : []).filter(
+              (conversation) => conversation?.conversation_id
+            )
+          );
         } catch (cacheError) {
           console.error('Cache parse error:', cacheError);
           toast.error('Failed to fetch conversations');
@@ -174,13 +185,7 @@ const MentorConversations = () => {
                     </h4>
                     <span className="text-[10px] text-gray-600 whitespace-nowrap font-black uppercase tracking-tighter flex items-center gap-1">
                       <FiClock size={10} />
-                      {new Date(conversation.started_at).toLocaleDateString(
-                        undefined,
-                        {
-                          month: 'short',
-                          day: 'numeric',
-                        }
-                      )}
+                      {formatLongDateTime(conversation.started_at)}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 truncate max-w-xl">

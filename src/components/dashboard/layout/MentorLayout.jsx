@@ -14,9 +14,14 @@ import {
 } from 'react-icons/fi';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from 'react-redux';
-import { getConversations, deleteConversation } from '../../../services/mentorService';
+import {
+  getConversations,
+  deleteConversation,
+  getMentorConversationCacheKey,
+} from '../../../services/mentorService';
 import ConfirmModal from '../../../components/ui/ConfirmModal';
 import toast from 'react-hot-toast';
+import { formatLongDate, formatTime } from '../../../utils/formatters';
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -30,14 +35,38 @@ const MentorLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
+  const userId = user?.user_id || user?.id;
 
   const fetchConversations = async () => {
-    if (!user?.id) return;
+    if (!userId) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
-      const data = await getConversations(user.id);
-      setConversations(data);
+      const data = await getConversations(userId);
+      const normalized = (Array.isArray(data) ? data : []).filter(
+        (conversation) => conversation?.conversation_id
+      );
+      setConversations(normalized);
     } catch (error) {
       console.error("Error fetching mentor conversations sidebar:", error);
+      const cached = localStorage.getItem(getMentorConversationCacheKey(userId));
+
+      if (!cached) return;
+
+      try {
+        const parsed = JSON.parse(cached);
+        setConversations(
+          (Array.isArray(parsed) ? parsed : []).filter(
+            (conversation) => conversation?.conversation_id
+          )
+        );
+      } catch (cacheError) {
+        console.error("Error parsing mentor sidebar cache:", cacheError);
+      }
     } finally {
       setLoading(false);
     }
@@ -45,25 +74,14 @@ const MentorLayout = () => {
 
   useEffect(() => {
     fetchConversations();
-  }, [user?.id, location.pathname]); // Re-fetch when path changes or user changes
+  }, [userId, location.pathname]); // Re-fetch when path changes or user changes
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const filteredConversations = conversations.filter(conv =>
+  const filteredConversations = (Array.isArray(conversations) ? conversations : []).filter(conv =>
     (conv.preview || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const groupedConversations = filteredConversations.reduce((groups, conv) => {
-    const dateKey = formatDate(conv.started_at);
+    const dateKey = formatLongDate(conv.started_at);
     if (!groups[dateKey]) groups[dateKey] = [];
     groups[dateKey].push(conv);
     return groups;
@@ -74,11 +92,11 @@ const MentorLayout = () => {
   };
 
   const handleDelete = async () => {
-    if (!deleteModal.id || !user?.id) return;
+    if (!deleteModal.id || !userId) return;
 
     const loadingToast = toast.loading("Deleting conversation...");
     try {
-      await deleteConversation(deleteModal.id, user.id);
+      await deleteConversation(deleteModal.id, userId);
       toast.success("Conversation deleted", { id: loadingToast });
       fetchConversations();
       setDeleteModal({ open: false, id: null });
@@ -103,7 +121,7 @@ const MentorLayout = () => {
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden"
+          className="absolute inset-0 bg-black/60 z-30 md:hidden cursor-pointer"
         />
       )}
 
@@ -209,7 +227,7 @@ const MentorLayout = () => {
                               </p>
                               <span className="text-[10px] text-gray-600">•</span>
                               <span className="text-[10px] text-gray-600">
-                                {new Date(conv.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {formatTime(conv.started_at)}
                               </span>
                             </div>
                           </div>
@@ -270,8 +288,8 @@ const MentorLayout = () => {
         {/* Toggle Button for Desktop */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 p-1.5 bg-black border border-white/10 rounded-full hover:border-yellow-500/50 transition-all shadow-xl hidden lg:flex
-            ${!isSidebarOpen ? 'translate-x-[20px]' : ''}`}
+          aria-label={isSidebarOpen ? 'Close mentor sidebar' : 'Open mentor sidebar'}
+          className="absolute left-4 top-4 z-50 p-1.5 bg-black border border-white/10 rounded-full hover:border-yellow-500/50 transition-all shadow-xl hidden lg:flex"
         >
           {isSidebarOpen ? <FiX className="w-3.5 h-3.5 text-yellow-500" /> : <FiMenu className="w-3.5 h-3.5 text-yellow-500" />}
         </button>
