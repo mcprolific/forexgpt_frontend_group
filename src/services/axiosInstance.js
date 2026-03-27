@@ -45,7 +45,6 @@ const refreshAccessToken = async () => {
     )
     .then((res) => applyTokenUpdate(res.data))
     .catch(async () => {
-      // fallback to /refresh if /auth/refresh is unavailable
       const res = await axios.post(
         `${baseURL}/refresh`,
         { refresh_token: refreshToken },
@@ -119,6 +118,7 @@ axiosInstance.interceptors.response.use(
         window.location.href = "/login";
       }
     }
+
     return Promise.reject(error);
   }
 );

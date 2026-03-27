@@ -29,12 +29,7 @@ export const login = createAsyncThunk(
       const data = await loginAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.detail ||
-        error.response?.data?.message ||
-        error.message ||
-        "Login failed"
-      );
+      return rejectWithValue(error.message || "Login failed");
     }
   }
 );
@@ -46,7 +41,7 @@ export const registerUser = createAsyncThunk(
       const data = await registerAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Registration failed");
+      return rejectWithValue(error.message || "Registration failed");
     }
   }
 );
@@ -58,7 +53,7 @@ export const confirmEmail = createAsyncThunk(
       const data = await confirmEmailAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || "Confirmation failed");
+      return rejectWithValue(error.message || "Confirmation failed");
     }
   }
 );

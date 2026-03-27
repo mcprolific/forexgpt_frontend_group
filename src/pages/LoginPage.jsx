@@ -15,6 +15,7 @@ import axiosInstance from "../services/axiosInstance";
 import { useTheme } from "../contexts/ThemeContext";
 import Logo from "../assets/logo.png";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import { forgotPasswordAPI } from "../features/auth/authAPI";
 
 const LoginPage = () => {
   const dispatch = useDispatch();
@@ -32,6 +33,7 @@ const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
   const [capsPassword, setCapsPassword] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
@@ -314,18 +316,9 @@ const LoginPage = () => {
 
                 {/* Password */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-[10px] font-bold uppercase tracking-widest" style={{ color: isLight ? '#374151' : '#6b7280' }}>
-                      Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setForgotOpen(true)}
-                      className="text-[10px] font-bold text-[#D4AF37] hover:text-[#FFD700] transition-colors"
-                    >
-                      Forgot?
-                    </button>
-                  </div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Password
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -356,6 +349,13 @@ const LoginPage = () => {
                       {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setForgotOpen(true)}
+                    className="mt-2 text-[10px] font-bold text-[#D4AF37] hover:text-[#FFD700] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
                   {errors.password && <p className="mt-1 text-[10px] text-red-400">{errors.password}</p>}
                   {capsPassword && (
                     <p className="mt-1 text-[10px] text-amber-500 font-bold uppercase tracking-tight">Caps Lock is ON</p>
@@ -395,7 +395,7 @@ const LoginPage = () => {
               {formError && /verify|confirm|unverified/i.test(formError) && (
                 <div className="mt-3 text-[11px] text-amber-400 text-center">
                   Didn’t get the email? Check spam or request a new link from support. After confirming, return to
-                  <Link to="/confirmed" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
+                  <Link to="/login" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
                 </div>
               )}
 
@@ -454,16 +454,26 @@ const LoginPage = () => {
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(forgotEmail)) {
                   show("Enter a valid email", "error");
                   return;
                 }
-                show("If this email exists, a reset link will be sent.", "success");
-                setForgotOpen(false);
+                try {
+                  setForgotSending(true);
+                  await forgotPasswordAPI(forgotEmail.trim());
+                  show("If this email exists, a reset link will be sent.", "success");
+                  setForgotOpen(false);
+                  setForgotEmail("");
+                } catch (error) {
+                  show(error.message || "Could not send reset link.", "error");
+                } finally {
+                  setForgotSending(false);
+                }
               }}
+              disabled={forgotSending}
             >
-              Send link
+              {forgotSending ? "Sending..." : "Send link"}
             </Button>
           </div>
         }

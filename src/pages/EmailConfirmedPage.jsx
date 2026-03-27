@@ -6,6 +6,9 @@ import PublicFooter from "../layout/PublicFooter";
 import { useDispatch } from "react-redux";
 import { confirmEmail } from "../features/auth/authSlice";
 
+const getParam = (searchParams, hashParams, key) =>
+  searchParams.get(key) || hashParams.get(key) || "";
+
 const EmailConfirmedPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -13,18 +16,48 @@ const EmailConfirmedPage = () => {
   const [status, setStatus] = useState({ loading: true, ok: false, message: "" });
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const token_hash = params.get("token_hash");
-    const type = params.get("type");
-
-    if (!token_hash || !type) {
-      setStatus({ loading: false, ok: false, message: "Missing confirmation parameters." });
-      return;
-    }
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(
+      location.hash.startsWith("#") ? location.hash.slice(1) : location.hash
+    );
+    const tokenHash = getParam(searchParams, hashParams, "token_hash");
+    const type = getParam(searchParams, hashParams, "type");
+    const accessToken = getParam(searchParams, hashParams, "access_token");
+    const confirmationToken =
+      tokenHash ||
+      getParam(searchParams, hashParams, "token") ||
+      getParam(searchParams, hashParams, "confirmation_token");
+    const errorDescription =
+      getParam(searchParams, hashParams, "error_description") ||
+      getParam(searchParams, hashParams, "error");
 
     (async () => {
       try {
-        const res = await dispatch(confirmEmail({ token_hash, type })).unwrap();
+        if (errorDescription) {
+          setStatus({ loading: false, ok: false, message: errorDescription });
+          return;
+        }
+
+        if (accessToken && !confirmationToken) {
+          setStatus({
+            loading: false,
+            ok: true,
+            message: "Your email has already been confirmed. You can now log in to access your dashboard.",
+          });
+          return;
+        }
+
+        if (!confirmationToken || !type) {
+          setStatus({
+            loading: false,
+            ok: false,
+            message:
+              "This confirmation link is missing information or has already been used. Request a new verification email and try again.",
+          });
+          return;
+        }
+
+        await dispatch(confirmEmail({ token_hash: confirmationToken, type })).unwrap();
         setStatus({ loading: false, ok: true, message: "Your email has been confirmed. You can now log in to access your dashboard." });
 
         // Auto-redirect to login after 3 seconds
@@ -32,10 +65,14 @@ const EmailConfirmedPage = () => {
           navigate("/login");
         }, 3000);
       } catch (err) {
-        setStatus({ loading: false, ok: false, message: err || "Confirmation failed." });
+        setStatus({
+          loading: false,
+          ok: false,
+          message: typeof err === "string" ? err : err?.message || "Confirmation failed.",
+        });
       }
     })();
-  }, [location.search, dispatch, navigate]);
+  }, [location.hash, location.search, dispatch, navigate]);
 
   return (
     <div className="relative min-h-screen bg-[#1A1A1A] overflow-hidden text-white selection:bg-[#D4AF37]/30">
