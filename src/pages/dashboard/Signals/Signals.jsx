@@ -136,6 +136,8 @@ const Signals = () => {
   const [selectedSignal, setSelectedSignal] = useState(null);
   const [lastSingleResult, setLastSingleResult] = useState(null);
   const [lastBatchResults, setLastBatchResults] = useState([]);
+  const [lastResultsSaved, setLastResultsSaved] = useState(false);
+  const [showResultFocus, setShowResultFocus] = useState(false);
 
   // Mode
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
@@ -173,6 +175,12 @@ const Signals = () => {
 
   useEffect(() => { fetchAll(); }, [userId]);
 
+  const hasLatestResults = Boolean(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0));
+
+  useEffect(() => {
+    if (!hasLatestResults) setShowResultFocus(false);
+  }, [hasLatestResults]);
+
   // ── Single Extraction ──────────────────────────────────────────────────────
   // POST /signals/extract
   // { transcript, company_name, user_id, save_to_db }
@@ -183,6 +191,9 @@ const Signals = () => {
     try {
       const result = await extractSignal(transcript, companyName || null, userId, saveToDb);
       setLastSingleResult(result || null);
+      setLastBatchResults([]);
+      setLastResultsSaved(Boolean(saveToDb));
+      setShowResultFocus(Boolean(result));
       // result: SignalResponse { signal (bool), currency_pair, direction,
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
@@ -215,6 +226,9 @@ const Signals = () => {
     try {
       const result = await batchExtract(valid, userId, batchSaveToDB);
       setLastBatchResults(Array.isArray(result?.signals) ? result.signals : []);
+      setLastSingleResult(null);
+      setLastResultsSaved(Boolean(batchSaveToDB));
+      setShowResultFocus(true);
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
         `Batch complete — ${result.signals_found}/${result.total} signals found`,
@@ -272,7 +286,33 @@ const Signals = () => {
   );
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-24">
+    <div className="relative">
+      {showResultFocus && hasLatestResults && (
+        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-8 md:pt-12">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowResultFocus(false)} />
+          <div className="relative z-10 w-full max-w-4xl space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
+                Latest Extraction Result
+              </h3>
+              <button
+                onClick={() => setShowResultFocus(false)}
+                className="text-[10px] font-black text-white-400 uppercase tracking-widest border border-white/10 px-3 py-2 rounded-xl hover:text-white hover:border-white/30 transition-all"
+              >
+                Close
+              </button>
+            </div>
+            {lastSingleResult && (
+              <SignalResult signal={lastSingleResult} user={user} />
+            )}
+            {lastBatchResults && lastBatchResults.map((r, i) => (
+              <SignalResult key={`focus-${i}`} signal={r} user={user} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`space-y-8 max-w-6xl mx-auto pb-24 transition-all ${showResultFocus && hasLatestResults ? 'blur-sm pointer-events-none select-none' : ''}`} aria-hidden={showResultFocus && hasLatestResults}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -498,19 +538,6 @@ const Signals = () => {
             </div>
           )}
 
-          {/* Latest Response(s) */}
-          {(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0)) && (
-            <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-widest pl-1">Neural Extraction Output</h3>
-              {lastSingleResult && (
-                <SignalResult signal={lastSingleResult} user={user} />
-              )}
-              {lastBatchResults && lastBatchResults.map((r, i) => (
-                <SignalResult key={i} signal={r} user={user} />
-              ))}
-            </div>
-          )}
-
           {/* by_currency_pair breakdown */}
           {stats?.by_currency_pair && Object.keys(stats.by_currency_pair).length > 0 && (
             <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.01] space-y-2">
@@ -689,6 +716,7 @@ const Signals = () => {
           </div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };

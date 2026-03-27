@@ -23,6 +23,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const maskEmail = (email) => {
+    if (!email || typeof email !== "string") return "";
+    const [local, domain] = email.split("@");
+    if (!domain) return email;
+    if (!local) return `***@${domain}`;
+    if (local.length === 1) return `${local}***@${domain}`;
+    if (local.length === 2) return `${local[0]}***@${domain}`;
+    return `${local[0]}${"*".repeat(Math.max(local.length - 2, 3))}${local[local.length - 1]}@${domain}`;
+  };
+
   const navItems = [
     { path: "/dashboard", icon: FiHome, label: "Dashboard" },
     { path: "/dashboard/codegen", icon: FiCode, label: "Code Generation" },
@@ -119,14 +129,14 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             </div>
             <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 md:hidden'}`}>
               <p className="text-xs font-bold text-gray-200 truncate">{user?.display_name || user?.email?.split('@')[0] || 'Traders'}</p>
-              <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+              <p className="text-[10px] text-gray-500 truncate">{maskEmail(user?.email)}</p>
             </div>
           </div>
 
           {!isOpen && (
             <div className="absolute left-full ml-4 px-3 py-2 bg-zinc-900 border border-white/10 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[60] min-w-[150px] hidden md:block">
               <p className="text-xs font-bold text-yellow-500">{user?.display_name || 'Active Trader'}</p>
-              <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+              <p className="text-[10px] text-gray-500 truncate">{maskEmail(user?.email)}</p>
               <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-zinc-900 border-l border-b border-white/10 rotate-45" />
             </div>
           )}
