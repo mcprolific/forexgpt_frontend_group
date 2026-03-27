@@ -96,11 +96,13 @@ export const loginAPI = async (payload) => {
     const res = await axiosInstance.post("/login", body, publicRequestConfig);
     const d = res.data || {};
     const token = d?.tokens?.access_token || null;
+    const refreshToken = d?.tokens?.refresh_token || null;
+    const expiresIn = d?.tokens?.expires_in || null;
     const user = d?.user || null;
     if (!token || !user) {
       throw new Error(d?.detail || "Invalid login credentials");
     }
-    return { token, user };
+    return { token, refreshToken, expiresIn, user };
   } catch (error) {
     throw new Error(getApiErrorMessage(error, "Login failed"));
   }
@@ -127,6 +129,17 @@ export const confirmEmailAPI = async (payload) => {
       { url: "/auth/confirm", data: payload },
     ],
     "Confirmation failed"
+  );
+  return response.data;
+};
+
+export const refreshTokenAPI = async (refreshToken) => {
+  const response = await postToFirstAvailable(
+    [
+      { url: "/refresh", data: { refresh_token: refreshToken } },
+      { url: "/auth/refresh", data: { refresh_token: refreshToken } },
+    ],
+    "Could not refresh token."
   );
   return response.data;
 };

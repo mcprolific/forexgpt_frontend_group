@@ -22,7 +22,7 @@ import toast from 'react-hot-toast';
 const GOLD = '#D4AF37';
 const GOLD_LIGHT = '#FFD700';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Backend API Reference (do NOT change these):
 //
 // POST /signals/extract
@@ -50,7 +50,7 @@ const GOLD_LIGHT = '#FFD700';
 //
 // DELETE /signals/{user_id}/{signal_id}
 //   Returns: { message, signal_id }
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const DirectionBadge = ({ direction }) => {
   const d = (direction || '').toUpperCase();
@@ -122,7 +122,7 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
 );
 
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// --- Main Page ----------------------------------------------------------------
 const Signals = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
@@ -138,22 +138,23 @@ const Signals = () => {
   const [lastSingleResult, setLastSingleResult] = useState(null);
   const [lastBatchResults, setLastBatchResults] = useState([]);
   const [lastResultsSaved, setLastResultsSaved] = useState(false);
+  const [showResultFocus, setShowResultFocus] = useState(false);
 
   // Mode
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
 
-  // Single mode — POST /signals/extract body fields
+  // Single mode � POST /signals/extract body fields
   const [transcript, setTranscript] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [saveToDb, setSaveToDb] = useState(true);
 
-  // Batch mode — POST /signals/batch body: { transcripts: [{text, company_name}] }
+  // Batch mode � POST /signals/batch body: { transcripts: [{text, company_name}] }
   const [batchEntries, setBatchEntries] = useState([
     { company_name: '', text: '' },
   ]);
   const [batchSaveToDB, setBatchSaveToDB] = useState(true);
 
-  // ── Fetch signals + stats ──────────────────────────────────────────────────
+  // -- Fetch signals + stats --------------------------------------------------
   const fetchAll = async () => {
     if (!userId) return;
     try {
@@ -180,7 +181,13 @@ const Signals = () => {
 
   useEffect(() => { fetchAll(); }, [userId]);
 
-  // ── Single Extraction ──────────────────────────────────────────────────────
+  const hasLatestResults = Boolean(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0));
+
+  useEffect(() => {
+    if (!hasLatestResults) setShowResultFocus(false);
+  }, [hasLatestResults]);
+
+  // -- Single Extraction ------------------------------------------------------
   // POST /signals/extract
   // { transcript, company_name, user_id, save_to_db }
   const handleSingleExtract = async () => {
@@ -192,11 +199,12 @@ const Signals = () => {
       setLastSingleResult(result || null);
       setLastBatchResults([]);
       setLastResultsSaved(Boolean(saveToDb));
+      setShowResultFocus(Boolean(result));
       // result: SignalResponse { signal (bool), currency_pair, direction,
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
         toast.success(
-          `Signal detected — ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
+          `Signal detected � ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
           { id: t, duration: 5000 }
         );
       } else {
@@ -213,7 +221,7 @@ const Signals = () => {
     }
   };
 
-  // ── Batch Extraction ───────────────────────────────────────────────────────
+  // -- Batch Extraction -------------------------------------------------------
   // POST /signals/batch
   // { transcripts: [{text, company_name}], user_id, save_to_db }
   const handleBatchExtract = async () => {
@@ -226,9 +234,10 @@ const Signals = () => {
       setLastBatchResults(Array.isArray(result?.signals) ? result.signals : []);
       setLastSingleResult(null);
       setLastResultsSaved(Boolean(batchSaveToDB));
+      setShowResultFocus(true);
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
-        `Batch complete — ${result.signals_found}/${result.total} signals found`,
+        `Batch complete � ${result.signals_found}/${result.total} signals found`,
         { id: t, duration: 5000 }
       );
       setBatchEntries([{ company_name: '', text: '' }]);
@@ -241,7 +250,7 @@ const Signals = () => {
     }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // -- Delete -----------------------------------------------------------------
   // DELETE /signals/{user_id}/{signal_id}
   const handleDelete = async (signalId) => {
     try {
@@ -283,9 +292,35 @@ const Signals = () => {
   );
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-24">
+    <div className="relative">
+      {showResultFocus && hasLatestResults && (
+        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-8 md:pt-12">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowResultFocus(false)} />
+          <div className="relative z-10 w-full max-w-4xl space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
+                Latest Extraction Result
+              </h3>
+              <button
+                onClick={() => setShowResultFocus(false)}
+                className="text-[10px] font-black text-white-400 uppercase tracking-widest border border-white/10 px-3 py-2 rounded-xl hover:text-white hover:border-white/30 transition-all"
+              >
+                Close
+              </button>
+            </div>
+            {lastSingleResult && (
+              <SignalResult signal={lastSingleResult} user={user} />
+            )}
+            {lastBatchResults && lastBatchResults.map((r, i) => (
+              <SignalResult key={`focus-${i}`} signal={r} user={user} />
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className={`space-y-8 max-w-6xl mx-auto pb-24 transition-all ${showResultFocus && hasLatestResults ? 'blur-sm pointer-events-none select-none' : ''}`} aria-hidden={showResultFocus && hasLatestResults}>
+
+      {/* -- Header ----------------------------------------------------------- */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -299,7 +334,7 @@ const Signals = () => {
           <p className="text-white-500 text-sm mt-1 font-bold uppercase tracking-widest">Institutional Forex Alpha From Earnings Transcripts</p>
         </div>
 
-        {/* Stats — SignalStatisticsResponse */}
+        {/* Stats � SignalStatisticsResponse */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/[0.02] border border-white/5 p-4 rounded-3xl">
           <div className="text-center px-3">
             <div className="text-[9px] font-black text-white-600 uppercase tracking-tighter mb-1">Total</div>
@@ -328,7 +363,7 @@ const Signals = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-        {/* ── Left: Extraction Panel ─────────────────────────────────────────── */}
+        {/* -- Left: Extraction Panel ------------------------------------------- */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-6 rounded-[28px] border border-white/5 bg-white/[0.01] backdrop-blur-sm">
 
@@ -354,7 +389,7 @@ const Signals = () => {
               </button>
             </div>
 
-            {/* ── SINGLE MODE ────────────────────────────────────────────────── */}
+            {/* -- SINGLE MODE -------------------------------------------------- */}
             {/* POST /signals/extract */}
             {/* Body: { transcript, company_name, user_id, save_to_db } */}
             {mode === 'single' && (
@@ -407,13 +442,13 @@ const Signals = () => {
               </div>
             )}
 
-            {/* ── BATCH MODE ─────────────────────────────────────────────────── */}
+            {/* -- BATCH MODE --------------------------------------------------- */}
             {/* POST /signals/batch */}
             {/* Body: { transcripts: [{text, company_name}], user_id, save_to_db } */}
             {mode === 'batch' && (
               <div className="space-y-4">
                 <p className="text-[10px] text-white-600 font-bold uppercase tracking-widest">
-                  Each entry → <code className="text-yellow-500/60">{'{ text, company_name }'}</code>
+                  Each entry ? <code className="text-yellow-500/60">{'{ text, company_name }'}</code>
                 </p>
 
                 <div className="space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
@@ -509,19 +544,6 @@ const Signals = () => {
             </div>
           )}
 
-          {/* Latest Response(s) */}
-          {(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0)) && (
-            <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-widest pl-1">Neural Extraction Output</h3>
-              {lastSingleResult && (
-                <SignalResult signal={lastSingleResult} user={user} />
-              )}
-              {lastBatchResults && lastBatchResults.map((r, i) => (
-                <SignalResult key={i} signal={r} user={user} />
-              ))}
-            </div>
-          )}
-
           {/* by_currency_pair breakdown */}
           {stats?.by_currency_pair && Object.keys(stats.by_currency_pair).length > 0 && (
             <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.01] space-y-2">
@@ -539,7 +561,7 @@ const Signals = () => {
           )}
         </div>
 
-        {/* ── Right: Signals Stream ───────────────────────────────────────────── */}
+        {/* -- Right: Signals Stream --------------------------------------------- */}
         <div className="lg:col-span-7 space-y-5">
 
           {/* Latest Results */}
@@ -564,10 +586,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {lastSingleResult.currency_pair || 'PAIR'} • {lastSingleResult.direction || '—'}
+                          {lastSingleResult.currency_pair || 'PAIR'} � {lastSingleResult.direction || '�'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : '—'}
+                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : '�'}
                         </span>
                       </div>
                       {lastSingleResult.reasoning && (
@@ -586,10 +608,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {r.currency_pair || 'PAIR'} • {r.direction || '—'}
+                          {r.currency_pair || 'PAIR'} � {r.direction || '�'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : '—'}
+                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : '�'}
                         </span>
                       </div>
                       {r.reasoning && (
@@ -613,7 +635,7 @@ const Signals = () => {
               </span>
             </div>
 
-            {/* Filter by primary_direction — LONG / SHORT / NEUTRAL from DB */}
+            {/* Filter by primary_direction � LONG / SHORT / NEUTRAL from DB */}
             <div className="flex items-center gap-2">
               <FiFilter size={12} className="text-white-600" />
               <select
@@ -661,7 +683,7 @@ const Signals = () => {
         </div>
       </div>
 
-      {/* ── Signal Detail Modal ───────────────────────────────────────────────── */}
+      {/* -- Signal Detail Modal ------------------------------------------------- */}
       {/* Shows full DB row: id, source_label, primary_direction, affected_pairs,
            confidence, primary_sentiment, primary_strength, base_currency, created_at */}
       <AnimatePresence>
@@ -702,6 +724,7 @@ const Signals = () => {
           </div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };

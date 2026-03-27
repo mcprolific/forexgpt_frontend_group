@@ -8,63 +8,53 @@ const SignalResult = ({ signal, user }) => {
 
     // Unified Mapping for SignalResponse (live) vs Database Row (saved)
     const data = {
-        company: signal.company_name || signal.source_label || 'N/A',
-        pair: signal.currency_pair || signal.base_currency || 'N/A',
-        detected: signal.signal === false ? 'NO' : 'YES',
-        direction: (signal.direction || signal.primary_direction || 'NEUTRAL').toUpperCase(),
-        confidence: signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : '—',
-        magnitude: signal.magnitude || signal.primary_strength || 'N/A',
-        horizon: signal.time_horizon || signal.source_type || 'N/A',
-        reasoning: signal.reasoning || 'No further analysis available.',
-        id: signal.signal_id || signal.id || 'Pending',
-        time: signal.timestamp || signal.created_at || new Date().toISOString(),
-        isSaved: signal.is_saved ? 'Yes' : (signal.signal_id ? 'Yes' : 'No'),
-        userId: user?.user_id || user?.id || 'a792422a-cbb7-40e2-b7cd-f396f1c45b32'
+        company:    signal.company_name   || signal.source_label      || 'N/A',
+        pair:       signal.currency_pair  || signal.base_currency      || 'N/A',
+        detected:   signal.signal === false ? 'NO' : 'YES',
+        direction: (signal.direction      || signal.primary_direction  || 'NEUTRAL').toUpperCase(),
+        confidence: signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : '?',
+        magnitude:  signal.magnitude      || signal.primary_strength   || 'N/A',
+        horizon:    signal.time_horizon   || signal.source_type        || 'N/A',
+        reasoning:  signal.reasoning      || 'No further analysis available.',
+        id:         signal.signal_id      || signal.id                 || 'Pending',
+        time:       signal.timestamp      || signal.created_at         || new Date().toISOString(),
+        isSaved:    signal.is_saved ? 'Yes' : (signal.signal_id ? 'Yes' : 'No'),
+        userId:     user?.user_id || user?.id || 'a792422a-cbb7-40e2-b7cd-f396f1c45b32',
     };
 
     const labelWidth = 17;
     const pad = (label) => label.padEnd(labelWidth, ' ');
 
+    const confidencePct = signal.confidence != null ? Math.round(signal.confidence * 100) : null;
+
+    // Navigate to Mentor with auth guard
     const handleLearnAboutSignal = () => {
-        const reasoning = signal.reasoning || 'this signal was detected';
-        const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
-        if (user?.id) {
-            navigate('/dashboard/mentor/messages/new', {
-                state: {
-                    fromSignals: true,
-                    prefilledQuestion: `Explain why ${reasoning}. How does this affect ${pair}?`
-                }
-            });
-            return;
-        }
-        navigate('/mentor', {
+        const destination = user?.id
+            ? '/dashboard/mentor/messages/new'
+            : '/mentor';
+
+        navigate(destination, {
             state: {
                 fromSignals: true,
-                prefilledQuestion: `Explain why ${reasoning}. How does this affect ${pair}?`
-            }
+                prefilledQuestion: `Explain why ${data.reasoning}. How does this affect ${data.pair}?`,
+            },
         });
     };
 
+    // Navigate to CodeGen with auth guard
     const handleGenerateStrategy = () => {
-        const confidence = signal.confidence != null ? `${Math.round(signal.confidence * 100)}%` : 'a suitable threshold';
-        const pair = signal.currency_pair || signal.base_currency || 'this currency pair';
-        const direction = (signal.direction || signal.primary_direction || 'NEUTRAL').toUpperCase();
-        if (user?.id) {
-            navigate('/dashboard/codegen/session/new', {
-                state: {
-                    fromSignals: true,
-                    prefilledDescription: `Create a strategy that trades ${pair} ${direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidence}.`
-                }
-            });
-            return;
-        }
-        navigate('/codegen', {
+        const destination = user?.id
+            ? '/dashboard/codegen/session/new'
+            : '/codegen';
+
+        navigate(destination, {
             state: {
                 fromSignals: true,
-                prefilledDescription: `Create a strategy that trades ${pair} ${direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidence}.`
-            }
+                prefilledDescription: `Create a strategy that trades ${data.pair} ${data.direction} when companies report similar forex exposure signals. Use confidence threshold of ${confidencePct != null ? `${confidencePct}%` : 'a suitable threshold'}.`,
+            },
         });
     };
+
     return (
         <Motion.div
             initial={{ opacity: 0, scale: 0.98 }}
@@ -104,11 +94,27 @@ const SignalResult = ({ signal, user }) => {
                     {'                '}Signal Information
                 </div>
 
-                <div className="opacity-60">
+                <div className="opacity-60 mb-10">
                     <div className="flex"><span>{pad('Signal ID')}</span> : <span className="text-white font-bold ml-1">{data.id}</span></div>
                     <div className="flex"><span>{pad('Generated Time')}</span> : <span className="text-white font-bold ml-1">{new Date(data.time).toISOString().replace('T', ' ').split('.')[0]} UTC</span></div>
                     <div className="flex"><span>{pad('Saved to DB')}</span> : <span className="text-white font-bold ml-1">{data.isSaved}</span></div>
                     <div className="flex"><span>{pad('User ID')}</span> : <span className="text-white font-bold ml-1">{data.userId}</span></div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/5">
+                    <button
+                        onClick={handleLearnAboutSignal}
+                        className="flex-1 px-4 py-2.5 text-[11px] tracking-widest uppercase font-black border border-white/10 text-gray-400 hover:text-white hover:border-yellow-600 transition-all duration-200 rounded-xl"
+                    >
+                        Learn About This Signal
+                    </button>
+                    <button
+                        onClick={handleGenerateStrategy}
+                        className="flex-1 px-4 py-2.5 text-[11px] tracking-widest uppercase font-black bg-white/5 border border-white/10 text-white hover:bg-yellow-600 transition-all duration-200 rounded-xl"
+                    >
+                        Generate Strategy
+                    </button>
                 </div>
             </div>
         </Motion.div>
