@@ -143,12 +143,12 @@ const Signals = () => {
   // Mode
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
 
-  // Single mode — POST /signals/extract body fields
+  // Single mode ï¿½ POST /signals/extract body fields
   const [transcript, setTranscript] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [saveToDb, setSaveToDb] = useState(true);
 
-  // Batch mode — POST /signals/batch body: { transcripts: [{text, company_name}] }
+  // Batch mode ï¿½ POST /signals/batch body: { transcripts: [{text, company_name}] }
   const [batchEntries, setBatchEntries] = useState([
     { company_name: '', text: '' },
   ]);
@@ -204,7 +204,7 @@ const Signals = () => {
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
         toast.success(
-          `Signal detected — ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
+          `Signal detected ï¿½ ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
           { id: t, duration: 5000 }
         );
       } else {
@@ -237,7 +237,7 @@ const Signals = () => {
       setShowResultFocus(true);
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
-        `Batch complete — ${result.signals_found}/${result.total} signals found`,
+        `Batch complete ï¿½ ${result.signals_found}/${result.total} signals found`,
         { id: t, duration: 5000 }
       );
       setBatchEntries([{ company_name: '', text: '' }]);
@@ -334,7 +334,7 @@ const Signals = () => {
           <p className="text-white-500 text-sm mt-1 font-bold uppercase tracking-widest">Institutional Forex Alpha From Earnings Transcripts</p>
         </div>
 
-        {/* Stats — SignalStatisticsResponse */}
+        {/* Stats ï¿½ SignalStatisticsResponse */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/[0.02] border border-white/5 p-4 rounded-3xl">
           <div className="text-center px-3">
             <div className="text-[9px] font-black text-white-600 uppercase tracking-tighter mb-1">Total</div>
@@ -586,10 +586,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {lastSingleResult.currency_pair || 'PAIR'} • {lastSingleResult.direction || '—'}
+                          {lastSingleResult.currency_pair || 'PAIR'} ï¿½ {lastSingleResult.direction || 'ï¿½'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : '—'}
+                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : 'ï¿½'}
                         </span>
                       </div>
                       {lastSingleResult.reasoning && (
@@ -608,10 +608,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {r.currency_pair || 'PAIR'} • {r.direction || '—'}
+                          {r.currency_pair || 'PAIR'} ï¿½ {r.direction || 'ï¿½'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : '—'}
+                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : 'ï¿½'}
                         </span>
                       </div>
                       {r.reasoning && (
@@ -635,7 +635,7 @@ const Signals = () => {
               </span>
             </div>
 
-            {/* Filter by primary_direction — LONG / SHORT / NEUTRAL from DB */}
+            {/* Filter by primary_direction ï¿½ LONG / SHORT / NEUTRAL from DB */}
             <div className="flex items-center gap-2">
               <FiFilter size={12} className="text-white-600" />
               <select
