@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   FiClock,
@@ -16,9 +16,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   analyzeBacktest,
-  askMentor,
   getConversationHistory,
 } from '../../../services/mentorService';
+import { streamMentorResponse } from '../../../features/mentor/mentorStream';
 import toast from 'react-hot-toast';
 import { formatLongDateTime } from '../../../utils/formatters';
 
@@ -41,13 +41,88 @@ const getLastConversationKey = (userId) =>
 
 const parseStoredMessages = (raw) => {
   if (!raw) return [];
-
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
+};
+
+// ─── Markdown renderer with proper spacing ───────────────────────────────────
+const MarkdownComponents = {
+  p: ({ children }) => (
+    <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
+  ),
+  h1: ({ children }) => (
+    <h1 className="text-base font-black text-white mb-2 mt-4">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-sm font-black text-white mb-2 mt-4">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-sm font-bold text-yellow-400 mb-1 mt-3">{children}</h3>
+  ),
+  ul: ({ children }) => (
+    <ul className="mb-3 pl-4 space-y-1 list-disc list-outside">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-3 pl-4 space-y-1 list-decimal list-outside">{children}</ol>
+  ),
+  li: ({ children }) => (
+    <li className="leading-relaxed">{children}</li>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-yellow-500/40 pl-3 my-3 text-gray-400 italic">
+      {children}
+    </blockquote>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-bold text-white">{children}</strong>
+  ),
+  em: ({ children }) => (
+    <em className="italic text-gray-300">{children}</em>
+  ),
+  code({ className, children, ...props }) {
+    const match = /language-(\w+)/.exec(className || '');
+    return match ? (
+      <div className="rounded-lg overflow-hidden my-4 border border-white/10 relative group/code">
+        <div className="absolute right-2 top-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
+              toast.success('Snippet copied');
+            }}
+            className="p-1.5 bg-black/50 backdrop-blur-sm rounded-md hover:text-yellow-500 transition-colors text-gray-400"
+          >
+            <FiCopy size={12} />
+          </button>
+        </div>
+        <SyntaxHighlighter
+          style={atomDark}
+          language={match[1]}
+          PreTag="div"
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            fontSize: '0.75rem',
+            backgroundColor: '#0d0d0d',
+          }}
+          {...props}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      </div>
+    ) : (
+      <code
+        className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-400 font-mono text-xs"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
 };
 
 const MentorMessages = () => {
@@ -59,11 +134,16 @@ const MentorMessages = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [analysisMode, setAnalysisMode] = useState(false);
   const [backtestData, setBacktestData] = useState(null);
+  const [activeConversationId, setActiveConversationId] = useState(
+    conversationId !== 'new' ? conversationId : null
+  );
 
   const scrollRef = useRef(null);
+  const streamAccumulator = useRef('');
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
 
@@ -96,7 +176,6 @@ const MentorMessages = () => {
         localStorage.setItem(getLastConversationKey(userId), conversationId);
       } catch (error) {
         console.error('Failed to load history:', error);
-
         if (cachedHistory.length > 0) {
           setMessages(cachedHistory);
         } else {
@@ -113,14 +192,11 @@ const MentorMessages = () => {
 
   useEffect(() => {
     if (!userId) return;
-
     const draftKey = getDraftKey(userId);
-
     if (conversationId === 'new') {
       localStorage.setItem(draftKey, JSON.stringify(messages));
       return;
     }
-
     localStorage.removeItem(draftKey);
   }, [conversationId, messages, userId]);
 
@@ -136,7 +212,7 @@ const MentorMessages = () => {
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
-  }, [messages, sending]);
+  }, [messages, sending, streamingContent]);
 
   useEffect(() => {
     const state = location.state;
@@ -172,9 +248,7 @@ const MentorMessages = () => {
           results: incomingResults,
         });
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setMessages((prev) => {
           const next = [
@@ -209,10 +283,7 @@ const MentorMessages = () => {
     };
 
     runBacktestAnalysis();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [analysisMode, conversationId, location.state, userId]);
 
   const handleCopy = async (text, successMessage = 'Copied to clipboard') => {
@@ -225,7 +296,8 @@ const MentorMessages = () => {
     }
   };
 
-  const handleSendMessage = async () => {
+  // ─── Streaming send ────────────────────────────────────────────────────────
+  const handleSendMessage = useCallback(async () => {
     if (!newMessage.trim() || sending || !userId) return;
 
     const userContent = newMessage.trim();
@@ -238,106 +310,85 @@ const MentorMessages = () => {
 
     setMessages((prev) => {
       const next = [...prev, userMsg];
-
       if (conversationId && conversationId !== 'new') {
         localStorage.setItem(
           `fgpt_mentor_history_${conversationId}`,
           JSON.stringify(next)
         );
       }
-
       return next;
     });
 
     setNewMessage('');
     setSending(true);
+    setStreamingContent('');
+    streamAccumulator.current = '';
 
-    try {
-      const response = await askMentor(
-        userContent,
-        conversationId === 'new' ? null : conversationId,
-        userId
-      );
+    const currentConvId = activeConversationId;
 
-      const assistantMessage = {
-        id: `${Date.now()}-assistant`,
-        role: 'assistant',
-        content: response?.response || 'No response returned.',
-        timestamp: response?.timestamp || new Date().toISOString(),
-      };
+    streamMentorResponse({
+      question: userContent,
+      conversationId: currentConvId,
+      onChunk: (chunk) => {
+        streamAccumulator.current += chunk;
+        setStreamingContent(streamAccumulator.current);
+      },
+      onDone: () => {
+        const finalContent = streamAccumulator.current || 'No response returned.';
+        const assistantMessage = {
+          id: `${Date.now()}-assistant`,
+          role: 'assistant',
+          content: finalContent,
+          timestamp: new Date().toISOString(),
+        };
 
-      if (conversationId === 'new' && response?.conversation_id) {
-        const nextConversationId = response.conversation_id;
         setMessages((prev) => {
           const next = [...prev, assistantMessage];
-          localStorage.setItem(
-            `fgpt_mentor_history_${nextConversationId}`,
-            JSON.stringify(next)
-          );
+          const targetId = currentConvId || conversationId;
+          if (targetId && targetId !== 'new') {
+            localStorage.setItem(
+              `fgpt_mentor_history_${targetId}`,
+              JSON.stringify(next)
+            );
+          }
           return next;
         });
-        localStorage.setItem(
-          getLastConversationKey(userId),
-          nextConversationId
-        );
-        localStorage.removeItem(getDraftKey(userId));
-        navigate(`/dashboard/mentor/messages/${response.conversation_id}`, {
-          replace: true,
-        });
-        return;
-      }
 
-      if (conversationId === 'new') {
-        setMessages((prev) => [...prev, assistantMessage]);
-        return;
-      }
+        setStreamingContent('');
+        streamAccumulator.current = '';
+        setSending(false);
 
-      setMessages((prev) => {
-        const next = [
-          ...prev,
-          assistantMessage,
-        ];
-
-        if (conversationId && conversationId !== 'new') {
-          localStorage.setItem(
-            `fgpt_mentor_history_${conversationId}`,
-            JSON.stringify(next)
-          );
-        }
-
-        return next;
-      });
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      toast.error('Failed to send message');
-      setErrorMessage('Failed to send message. Please try again.');
-
-      setMessages((prev) => {
-        const next = prev.filter((message) => message.id !== userMsg.id);
-
+        // Navigate out of 'new' if we started with it
         if (conversationId === 'new') {
-          localStorage.setItem(getDraftKey(userId), JSON.stringify(next));
-        } else if (conversationId) {
-          localStorage.setItem(
-            `fgpt_mentor_history_${conversationId}`,
-            JSON.stringify(next)
-          );
+          localStorage.removeItem(getDraftKey(userId));
         }
-
-        return next;
-      });
-    } finally {
-      setSending(false);
-    }
-  };
+      },
+      onError: (err) => {
+        console.error('Streaming failed:', err);
+        toast.error('Failed to send message');
+        setErrorMessage('Failed to send message. Please try again.');
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        setStreamingContent('');
+        streamAccumulator.current = '';
+        setSending(false);
+      },
+    });
+  }, [newMessage, sending, userId, conversationId, activeConversationId]);
 
   const handleGenerateCode = (content) => {
+    // Build a concise prompt instead of dumping the full response
+    const strategyType = detectStrategyType(content) || 'trading';
+    const truncated = content.length > 280
+      ? content.slice(0, 280).replace(/\s+\S*$/, '') + '...'
+      : content;
+    const prompt = `Create a ${strategyType} strategy based on: ${truncated}`;
+
     navigate('/dashboard/codegen/session/new', {
       state: {
         fromMentor: true,
-        strategyType: detectStrategyType(content) || 'trading',
+        strategyType,
         context: content,
-        strategyText: content,
+        strategyText: prompt,
       },
     });
   };
@@ -364,6 +415,8 @@ const MentorMessages = () => {
     });
   };
 
+  const hasMessages = messages.length > 0 || sending;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -374,7 +427,8 @@ const MentorMessages = () => {
 
   return (
     <div className="flex flex-col min-h-screen w-full bg-black/20 backdrop-blur-sm border border-white/5 overflow-hidden">
-      <div className="bg-white/[0.02] border-b border-white/5 p-5">
+      {/* Header */}
+      <div className="bg-white/[0.02] border-b border-white/5 p-5 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
@@ -401,175 +455,158 @@ const MentorMessages = () => {
         </div>
       </div>
 
+      {/* Messages area — grows; centers content when empty */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+        className={`flex-1 overflow-y-auto p-6 custom-scrollbar ${
+          !hasMessages ? 'flex flex-col items-center justify-center' : 'space-y-6'
+        }`}
       >
         {errorMessage && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
+          <div className="w-full rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3 mb-4">
             {errorMessage}
           </div>
         )}
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-20">
+
+        {!hasMessages ? (
+          <div className="flex flex-col items-center justify-center opacity-20">
             <FiZap size={48} className="text-yellow-500 mb-4" />
             <p className="font-black uppercase tracking-[0.3em] text-xs">
               Awaiting Input Query
             </p>
           </div>
         ) : (
-          messages.map((message, idx) => {
-            const showGenerateCode =
-              message.role === 'assistant' &&
-              Boolean(detectStrategyType(message.content));
-            const showImproveStrategy =
-              message.role === 'assistant' &&
-              analysisMode &&
-              idx === messages.length - 1 &&
-              Boolean(
-                backtestData?.strategyCode ||
-                backtestData?.results?.custom_code ||
-                backtestData?.code
-              );
+          <div className="space-y-6 w-full">
+            {messages.map((message, idx) => {
+              const showGenerateCode =
+                message.role === 'assistant' &&
+                Boolean(detectStrategyType(message.content));
+              const showImproveStrategy =
+                message.role === 'assistant' &&
+                analysisMode &&
+                idx === messages.length - 1 &&
+                Boolean(
+                  backtestData?.strategyCode ||
+                  backtestData?.results?.custom_code ||
+                  backtestData?.code
+                );
 
-            return (
+              return (
+                <Motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={message.id || idx}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl p-4 transition-all ${
+                      message.role === 'user'
+                        ? 'bg-[#7A6020] text-[#F5E9C8] font-bold shadow-lg shadow-black/20'
+                        : 'bg-white/[0.03] border border-white/5 text-gray-200'
+                    }`}
+                  >
+                    {/* AI label — no divider line */}
+                    {message.role === 'assistant' && (
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
+                          AI MENTOR
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="text-sm leading-relaxed max-w-none">
+                      <ReactMarkdown components={MarkdownComponents}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+
+                    {(showGenerateCode || showImproveStrategy) && (
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        {showGenerateCode && (
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateCode(message.content)}
+                            className="px-4 py-2 rounded-lg bg-yellow-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+                          >
+                            Generate Code
+                          </button>
+                        )}
+                        {showImproveStrategy && (
+                          <button
+                            type="button"
+                            onClick={handleImproveStrategy}
+                            className="px-4 py-2 rounded-lg bg-green-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+                          >
+                            Improve Strategy
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div
+                      className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
+                        message.role === 'user' ? 'text-[#F5E9C8]/40' : 'text-gray-600'
+                      }`}
+                    >
+                      <span>{formatLongDateTime(message.timestamp)}</span>
+                      {message.role === 'assistant' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(message.content, 'Message copied')}
+                            className="hover:text-yellow-500"
+                          >
+                            <FiCopy />
+                          </button>
+                          <button type="button" className="hover:text-yellow-500">
+                            <FiThumbsUp />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Motion.div>
+              );
+            })}
+
+            {/* Live streaming bubble */}
+            {sending && (
               <Motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                key={message.id || idx}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className="flex justify-start"
               >
-                <div
-                  className={`max-w-[85%] rounded-2xl p-4 transition-all ${
-                    message.role === 'user'
-                      ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10'
-                      : 'bg-white/[0.03] border border-white/5 text-gray-200'
-                  }`}
-                >
-                  {message.role === 'assistant' && (
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
-                      <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
-                        AI MENTOR
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="text-sm leading-relaxed prose prose-invert max-w-none">
-                    <ReactMarkdown
-                      components={{
-                        code({ className, children, ...props }) {
-                          const match = /language-(\w+)/.exec(className || '');
-
-                          return match ? (
-                            <div className="rounded-lg overflow-hidden my-4 border border-white/10 relative group/code">
-                              <div className="absolute right-2 top-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleCopy(
-                                      String(children).replace(/\n$/, ''),
-                                      'Snippet copied'
-                                    )
-                                  }
-                                  className="p-1.5 bg-black/50 backdrop-blur-sm rounded-md hover:text-yellow-500 transition-colors text-gray-400"
-                                >
-                                  <FiCopy size={12} />
-                                </button>
-                              </div>
-                              <SyntaxHighlighter
-                                style={atomDark}
-                                language={match[1]}
-                                PreTag="div"
-                                customStyle={{
-                                  margin: 0,
-                                  padding: '1rem',
-                                  fontSize: '0.75rem',
-                                  backgroundColor: '#0d0d0d',
-                                }}
-                                {...props}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            </div>
-                          ) : (
-                            <code
-                              className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-500 font-mono text-xs"
-                              {...props}
-                            >
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-
-                  {(showGenerateCode || showImproveStrategy) && (
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      {showGenerateCode && (
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateCode(message.content)}
-                          className="px-4 py-2 rounded-lg bg-yellow-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                        >
-                          Generate Code
-                        </button>
-                      )}
-                      {showImproveStrategy && (
-                        <button
-                          type="button"
-                          onClick={handleImproveStrategy}
-                          className="px-4 py-2 rounded-lg bg-green-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                        >
-                          Improve Strategy
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <div
-                    className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                      message.role === 'user' ? 'text-black/40' : 'text-gray-600'
-                    }`}
-                  >
-                    <span>
-                      {formatLongDateTime(message.timestamp)}
-                    </span>
-                    {message.role === 'assistant' && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(message.content, 'Message copied')}
-                          className="hover:text-yellow-500"
-                        >
-                          <FiCopy />
-                        </button>
-                        <button type="button" className="hover:text-yellow-500">
-                          <FiThumbsUp />
-                        </button>
+                <div className="max-w-[85%] bg-white/[0.03] border border-white/5 rounded-2xl p-4">
+                  {streamingContent ? (
+                    <>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
+                          AI MENTOR
+                        </span>
+                        <div className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
                       </div>
-                    )}
-                  </div>
+                      <div className="text-sm leading-relaxed text-gray-200 max-w-none">
+                        <ReactMarkdown components={MarkdownComponents}>
+                          {streamingContent}
+                        </ReactMarkdown>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex gap-2">
+                      <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce" />
+                      <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                  )}
                 </div>
               </Motion.div>
-            );
-          })
-        )}
-
-        {sending && (
-          <div className="flex justify-start">
-            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex gap-2">
-              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce" />
-              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-              <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce [animation-delay:0.4s]" />
-            </div>
+            )}
           </div>
         )}
       </div>
 
-      <div className="sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5">
+      {/* Input — always at the bottom */}
+      <div className="sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0">
         <div className="relative group">
           <input
             type="text"

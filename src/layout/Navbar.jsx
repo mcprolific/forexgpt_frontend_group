@@ -6,7 +6,7 @@ const Navbar = ({ toggleSidebar }) => {
   const { logout } = useAuth();
 
   return (
-    <header className="flex items-center justify-between bg-white shadow p-4">
+    <header className="flex items-center justify-between bg-white shadow p-4 sticky top-0 z-30">
       {/* Mobile menu button */}
       <button
         onClick={toggleSidebar}

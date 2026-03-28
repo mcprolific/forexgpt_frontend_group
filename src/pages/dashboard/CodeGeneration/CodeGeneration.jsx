@@ -83,19 +83,12 @@ const CodeGeneration = () => {
 
   useEffect(() => {
     const state = location.state || {};
+    if (!Object.keys(state).length) return;
 
     if (state.fromMentor) {
-      const strategyType = state.strategyType || "";
-      const context = state.context || state.strategyText || "";
-      const mentorPrompt = strategyType
-        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ""}`
-        : context
-          ? `Create a trading strategy based on: ${context}`
-          : "";
-
-      if (mentorPrompt) {
-        setNewMessage(mentorPrompt);
-      }
+      // Use the pre-built strategyText prompt passed from MentorMessages
+      const prompt = state.strategyText || "";
+      if (prompt) setNewMessage(prompt);
     }
 
     if (state.prefilledDescription) {
@@ -108,7 +101,10 @@ const CodeGeneration = () => {
       setBacktestResults(state.backtestResults || null);
       setMentorAnalysis(state.mentorAnalysis || null);
     }
-  }, [location.state]);
+
+    // Clear consumed state so a page re-render doesn't re-trigger this effect
+    navigate(location.pathname, { replace: true, state: null });
+  }, []);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -651,17 +647,17 @@ const CodeGeneration = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               key={message.id || idx}
-              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start w-full"}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl p-4 transition-all ${
+                className={`rounded-2xl p-4 transition-all ${
                   message.role === "user"
-                    ? "bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10"
-                    : "bg-white/[0.03] border border-white/5 text-gray-200"
+                    ? "max-w-[85%] bg-[#7A6020] text-[#F5E9C8] font-bold shadow-lg shadow-black/20"
+                    : "w-full bg-white/[0.03] border border-white/5 text-gray-200"
                 }`}
               >
                 {message.role === "assistant" && (
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                  <div className="flex items-center gap-2 mb-3">
                     <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
                       {message.isImproved ? "IMPROVED STRATEGY" : "AI LOGIC"}
                     </span>
@@ -678,7 +674,7 @@ const CodeGeneration = () => {
 
                 <div
                   className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                    message.role === "user" ? "text-black/40" : "text-gray-600"
+                    message.role === "user" ? "text-[#F5E9C8]/40" : "text-gray-600"
                   }`}
                 >
                   <span>{formatLongDateTime(message.timestamp)}</span>
