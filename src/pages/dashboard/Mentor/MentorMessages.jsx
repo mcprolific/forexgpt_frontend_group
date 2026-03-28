@@ -501,12 +501,12 @@ const MentorMessages = () => {
                   <div
                     className={`max-w-[85%] rounded-2xl p-4 transition-all ${
                       message.role === 'user'
-                        ? 'bg-[#7A6020] text-[#F5E9C8] font-bold shadow-lg shadow-black/20'
+                        ? 'bg-blue-600 text-white font-bold shadow-lg shadow-black/20'
                         : 'bg-white/[0.03] border border-white/5 text-gray-200'
                     }`}
                   >
-                    {/* AI label — no divider line */}
-                    {message.role === 'assistant' && (
+                    {/* AI label removed */}
+                    {message.role === 'assistant' && false && (
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
                           AI MENTOR
@@ -579,12 +579,13 @@ const MentorMessages = () => {
                 <div className="max-w-[85%] bg-white/[0.03] border border-white/5 rounded-2xl p-4">
                   {streamingContent ? (
                     <>
-                      <div className="flex items-center gap-2 mb-3">
+                      {/* AI label removed */}
+                      {false && <div className="flex items-center gap-2 mb-3">
                         <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
                           AI MENTOR
                         </span>
                         <div className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                      </div>
+                      </div>}
                       <div className="text-sm leading-relaxed text-gray-200 max-w-none">
                         <ReactMarkdown components={MarkdownComponents}>
                           {streamingContent}
@@ -605,9 +606,9 @@ const MentorMessages = () => {
         )}
       </div>
 
-      {/* Input — always at the bottom */}
-      <div className="sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0">
-        <div className="relative group">
+      {/* Input — at bottom when messages exist, centered when empty */}
+      <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'flex-1 flex items-center justify-center p-6'}`}>
+        <div className="relative group w-full max-w-2xl">
           <input
             type="text"
             value={newMessage}
@@ -626,14 +627,16 @@ const MentorMessages = () => {
             <FiSend size={18} />
           </button>
         </div>
-        <div className="mt-3 flex items-center justify-center gap-6">
-          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
-            <FiZap className="text-yellow-500" /> High-Compute Node
-          </span>
-          <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
-            <FiClock className="text-yellow-500" /> Real-time Knowledge
-          </span>
-        </div>
+        {hasMessages && (
+          <div className="mt-3 flex items-center justify-center gap-6">
+            <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
+              <FiZap className="text-yellow-500" /> High-Compute Node
+            </span>
+            <span className="text-[10px] text-gray-700 font-bold uppercase tracking-widest flex items-center gap-1">
+              <FiClock className="text-yellow-500" /> Real-time Knowledge
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
