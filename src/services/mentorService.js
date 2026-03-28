@@ -128,6 +128,9 @@ const filterHistoryForConversation = (history, conversationId) => {
   return matching.length > 0 ? matching : history;
 };
 
+// ==============================
+// ASK MENTOR
+// ==============================
 export const askMentor = async (message, conversationId, userId) => {
   try {
     const endpoint = conversationId
@@ -173,12 +176,14 @@ export const askMentor = async (message, conversationId, userId) => {
   }
 };
 
+// ==============================
+// GET CONVERSATIONS
+// ==============================
 export const getConversations = async (userId) => {
   const cached = readCachedConversationList(userId);
 
   try {
     const candidates = [
-      "/mentor/conversations",
       `/mentor/conversations/${userId}`,
       `/mentor/conversations?user_id=${userId}`,
       `/mentor/history?user_id=${userId}`,
@@ -209,10 +214,12 @@ export const getConversations = async (userId) => {
   }
 };
 
+// ==============================
+// GET HISTORY
+// ==============================
 export const getConversationHistory = async (conversationId, userId) => {
   try {
     const candidates = [
-      `/mentor/conversations/${conversationId}/messages`,
       `/mentor/conversations/${userId}/${conversationId}`,
       `/mentor/history/${userId}/${conversationId}`,
       `/mentor/history?user_id=${userId}&conversation_id=${conversationId}`,
@@ -250,22 +257,14 @@ export const getConversationHistory = async (conversationId, userId) => {
   }
 };
 
+// ==============================
+// DELETE CONVERSATION
+// ==============================
 export const deleteConversation = async (conversationId, userId) => {
   try {
-    let res;
-
-    try {
-      res = await axiosInstance.delete(`/mentor/conversations/${conversationId}`);
-    } catch (error) {
-      if (![404, 405].includes(error?.response?.status)) {
-        throw error;
-      }
-
-      res = await axiosInstance.delete(
-        `/mentor/conversations/${userId}/${conversationId}`
-      );
-    }
-
+    const res = await axiosInstance.delete(
+      `/mentor/conversations/${conversationId}`
+    );
     writeCachedConversationList(
       userId,
       readCachedConversationList(userId).filter(
@@ -279,6 +278,9 @@ export const deleteConversation = async (conversationId, userId) => {
   }
 };
 
+// ==============================
+// ANALYZE BACKTEST
+// ==============================
 export const analyzeBacktest = async (payload) => {
   try {
     const res = await axiosInstance.post("/mentor/analyze-backtest", payload);

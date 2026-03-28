@@ -2,6 +2,8 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { loginAPI, registerAPI, confirmEmailAPI } from "./authAPI";
 
 const storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+const storedRefreshToken = typeof localStorage !== "undefined" ? localStorage.getItem("refresh_token") : null;
+const storedTokenExpiresAt = typeof localStorage !== "undefined" ? localStorage.getItem("token_expires_at") : null;
 const storedUser = typeof localStorage !== "undefined" ? (() => {
   try {
     const raw = localStorage.getItem("user");
@@ -14,6 +16,8 @@ const storedUser = typeof localStorage !== "undefined" ? (() => {
 const initialState = {
   user: storedUser,
   token: storedToken,
+  refreshToken: storedRefreshToken,
+  tokenExpiresAt: storedTokenExpiresAt ? Number(storedTokenExpiresAt) : null,
   loading: false,
   error: null,
 };
@@ -66,8 +70,12 @@ const authSlice = createSlice({
     logoutUser: (state) => {
       state.user = null;
       state.token = null;
+      state.refreshToken = null;
+      state.tokenExpiresAt = null;
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("token_expires_at");
         localStorage.removeItem("user");
       }
     },
@@ -82,9 +90,18 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         const token = action.payload?.token || null;
+        const refreshToken = action.payload?.refreshToken || null;
+        const expiresIn = action.payload?.expiresIn || null;
+        const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
         if (token && typeof localStorage !== "undefined") {
           localStorage.setItem("token", token);
+        }
+        if (refreshToken && typeof localStorage !== "undefined") {
+          localStorage.setItem("refresh_token", refreshToken);
+        }
+        if (expiresAt && typeof localStorage !== "undefined") {
+          localStorage.setItem("token_expires_at", String(expiresAt));
         }
         if (user && typeof localStorage !== "undefined") {
           try {
@@ -94,6 +111,8 @@ const authSlice = createSlice({
           }
         }
         state.token = token || state.token;
+        state.refreshToken = refreshToken || state.refreshToken;
+        state.tokenExpiresAt = expiresAt || state.tokenExpiresAt;
         state.user = user || state.user;
       })
       .addCase(login.rejected, (state, action) => {
@@ -121,9 +140,18 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         const token = action.payload?.tokens?.access_token || null;
+        const refreshToken = action.payload?.tokens?.refresh_token || null;
+        const expiresIn = action.payload?.tokens?.expires_in || null;
+        const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
         if (token && typeof localStorage !== "undefined") {
           localStorage.setItem("token", token);
+        }
+        if (refreshToken && typeof localStorage !== "undefined") {
+          localStorage.setItem("refresh_token", refreshToken);
+        }
+        if (expiresAt && typeof localStorage !== "undefined") {
+          localStorage.setItem("token_expires_at", String(expiresAt));
         }
         if (user && typeof localStorage !== "undefined") {
           try {
@@ -133,6 +161,8 @@ const authSlice = createSlice({
           }
         }
         state.token = token || state.token;
+        state.refreshToken = refreshToken || state.refreshToken;
+        state.tokenExpiresAt = expiresAt || state.tokenExpiresAt;
         state.user = user || state.user;
       })
       .addCase(confirmEmail.rejected, (state, action) => {

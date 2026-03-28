@@ -1,8 +1,10 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import ProtectedRoute from './layout/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
 import LoadingScreen from './components/ui/LoadingScreen';
+import { logoutUser } from './features/auth/authSlice';
 
 // ── Layouts (lazy) ────────────────────────────────────────────────────
 const DashboardLayout      = lazy(() => import('./components/dashboard/layout/DashboardLayout'));
@@ -50,6 +52,66 @@ const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'))
 const TranscriptDashboard = lazy(() => import('./pages/dashboard/Transcript/TranscriptDashboard'));
 
 function App() {
+  const dispatch = useDispatch();
+  const { user, token } = useSelector((state) => state.auth);
+  const inactivityTimerRef = useRef(null);
+  const warningTimerRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
+  const countdownIntervalRef = useRef(null);
+  const INACTIVITY_MS = 10 * 60 * 1000;
+  const WARNING_MS = 1 * 60 * 1000;
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const [warningSecondsLeft, setWarningSecondsLeft] = useState(60);
+
+  useEffect(() => {
+    const hasToken = token || (typeof localStorage !== "undefined" ? localStorage.getItem("token") : null);
+    if (!user && !hasToken) return undefined;
+
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
+      if (showInactivityWarning) setShowInactivityWarning(false);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      if (warningTimerRef.current) {
+        clearTimeout(warningTimerRef.current);
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      setWarningSecondsLeft(Math.floor(WARNING_MS / 1000));
+
+      warningTimerRef.current = setTimeout(() => {
+        setShowInactivityWarning(true);
+        const tick = () => {
+          const elapsed = Date.now() - lastActivityRef.current;
+          const remaining = Math.max(INACTIVITY_MS - elapsed, 0);
+          setWarningSecondsLeft(Math.ceil(remaining / 1000));
+        };
+        tick();
+        countdownIntervalRef.current = setInterval(tick, 1000);
+      }, INACTIVITY_MS - WARNING_MS);
+
+      inactivityTimerRef.current = setTimeout(() => {
+        dispatch(logoutUser());
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }, INACTIVITY_MS);
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      events.forEach((evt) => window.removeEventListener(evt, resetTimer));
+    };
+  }, [dispatch, token, user, showInactivityWarning]);
+
   return (
     <>
       <Toaster
@@ -69,6 +131,29 @@ function App() {
           },
         }}
       />
+      {showInactivityWarning && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0B0B] p-6 text-white shadow-2xl">
+            <h3 className="text-sm font-black uppercase tracking-widest text-yellow-500 mb-3">
+              Inactivity Warning
+            </h3>
+            <p className="text-xs text-white/70 leading-relaxed mb-4">
+              You will be logged out in {warningSecondsLeft}s due to inactivity.
+              Move your mouse or press any key to stay signed in.
+            </p>
+            <button
+              onClick={() => {
+                lastActivityRef.current = Date.now();
+                setShowInactivityWarning(false);
+              }}
+              className="w-full py-2.5 rounded-xl bg-yellow-500 text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition-all"
+            >
+              Stay Signed In
+            </button>
+          </div>
+        </div>
+      )}
       <Router>
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
