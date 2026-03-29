@@ -652,7 +652,7 @@ const CodeGeneration = () => {
               <div
                 className={`rounded-2xl p-4 transition-all ${
                   message.role === "user"
-                    ? "max-w-[85%] bg-[#7A6020] text-[#F5E9C8] font-bold shadow-lg shadow-black/20"
+                    ? "max-w-[85%] bg-yellow-600 text-black font-bold shadow-lg shadow-black/20"
                     : "w-full bg-white/[0.03] border border-white/5 text-gray-200"
                 }`}
               >
@@ -674,7 +674,7 @@ const CodeGeneration = () => {
 
                 <div
                   className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                    message.role === "user" ? "text-[#F5E9C8]/40" : "text-gray-600"
+                    message.role === "user" ? "text-white/75" : "text-gray-600"
                   }`}
                 >
                   <span>{formatLongDateTime(message.timestamp)}</span>

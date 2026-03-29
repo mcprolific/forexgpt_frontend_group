@@ -55,13 +55,13 @@ const MarkdownComponents = {
     <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
   ),
   h1: ({ children }) => (
-    <h1 className="text-base font-black text-white mb-2 mt-4">{children}</h1>
+    <h1 className="text-base font-black text-white mb-4 mt-4">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-sm font-black text-white mb-2 mt-4">{children}</h2>
+    <h2 className="text-sm font-black text-white mb-4 mt-4">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-bold text-yellow-400 mb-1 mt-3">{children}</h3>
+    <h3 className="text-sm font-bold text-yellow-400 mb-2 mt-3">{children}</h3>
   ),
   ul: ({ children }) => (
     <ul className="mb-3 pl-4 space-y-1 list-disc list-outside">{children}</ul>
@@ -501,7 +501,7 @@ const MentorMessages = () => {
                   <div
                     className={`max-w-[85%] rounded-2xl p-4 transition-all ${
                       message.role === 'user'
-                        ? 'bg-blue-600 text-white font-bold shadow-lg shadow-black/20'
+                        ? 'bg-yellow-600 text-black font-bold shadow-lg shadow-black/20'
                         : 'bg-white/[0.03] border border-white/5 text-gray-200'
                     }`}
                   >
@@ -545,7 +545,7 @@ const MentorMessages = () => {
 
                     <div
                       className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                        message.role === 'user' ? 'text-[#F5E9C8]/40' : 'text-gray-600'
+                        message.role === 'user' ? 'text-white/70' : 'text-gray-600'
                       }`}
                     >
                       <span>{formatLongDateTime(message.timestamp)}</span>
