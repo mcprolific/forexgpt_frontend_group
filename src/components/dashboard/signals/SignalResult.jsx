@@ -129,12 +129,12 @@ const SignalResult = ({ signal, user }) => {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className={`relative rounded-3xl border bg-gradient-to-br ${dir.gradient} ${dir.border} overflow-hidden shadow-2xl ${dir.glow}`}
+      className={`backdrop-blur-3xl rounded-3xl border bg-gradient-to-br ${dir.gradient} ${dir.border} overflow-hidden shadow-2xl ${dir.glow} flex flex-col items-stretch justify-start min-h-full`}
     >
       {/* Subtle scanline overlay */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.015] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_2px] z-0" />
 
-      <div className="relative z-10 p-6 md:p-8 space-y-6">
+      <div className="relative z-10 p-6 md:p-8 space-y-6 flex flex-col">
 
         {/* ── Top row: pair + direction badge + confidence ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -208,7 +208,7 @@ const SignalResult = ({ signal, user }) => {
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-yellow-500/10"
           >
             <FiMessageCircle size={13} />
-            Ask Mentor
+            Learn about this signal
           </button>
           <button
             onClick={handleGenerateStrategy}
