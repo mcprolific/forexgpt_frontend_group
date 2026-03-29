@@ -72,6 +72,9 @@ const MarkdownComponents = {
   li: ({ children }) => (
     <li className="leading-relaxed">{children}</li>
   ),
+  hr: () => (
+    <hr className="my-5 border-0 h-px bg-white/10" />
+  ),
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-yellow-500/40 pl-3 my-3 text-gray-400 italic">
       {children}
