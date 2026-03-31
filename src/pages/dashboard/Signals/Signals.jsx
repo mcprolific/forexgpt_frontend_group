@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FiFilter, FiZap, FiCpu, FiPlus, FiTrash2, FiClock,
   FiActivity, FiTarget, FiX, FiTrendingUp, FiTrendingDown,
@@ -11,6 +12,7 @@ import {
   batchExtract,
   getUserSignals,
   getSignalStats,
+  getSignalDetail,
   deleteSignal,
   buildSignalStats,
 } from '../../../services/signalService';
@@ -126,6 +128,33 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
 const Signals = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const transcriptCacheKey = (id) => `fgpt_signal_transcripts_${id || "anon"}`;
+
+  const readTranscriptCache = () => {
+    if (typeof localStorage === "undefined") return {};
+    try {
+      const raw = localStorage.getItem(transcriptCacheKey(userId));
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const writeTranscriptCache = (next) => {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(transcriptCacheKey(userId), JSON.stringify(next || {}));
+  };
+
+  const storeTranscript = (signalId, text) => {
+    if (!signalId || !text) return;
+    const cache = readTranscriptCache();
+    cache[signalId] = text;
+    writeTranscriptCache(cache);
+  };
 
   // Data
   const [signals, setSignals] = useState([]);
@@ -181,6 +210,46 @@ const Signals = () => {
 
   useEffect(() => { fetchAll(); }, [userId]);
 
+  useEffect(() => {
+    const selectedId = location.state?.selectedSignalId;
+    if (!selectedId || !userId) return;
+
+    let cancelled = false;
+    const fromCache = signals.find(
+      (s) => s?.signal_id === selectedId || s?.id === selectedId
+    );
+    if (fromCache) setSelectedSignal(fromCache);
+
+    const loadDetail = async () => {
+      try {
+        const detail = await getSignalDetail(userId, selectedId);
+        if (!cancelled) {
+          const cachedTranscript = readTranscriptCache()[selectedId];
+          const nextDetail =
+            cachedTranscript &&
+            detail &&
+            !detail.transcript &&
+            !detail.raw_transcript &&
+            !detail.source_text
+              ? { ...detail, transcript: cachedTranscript }
+              : detail;
+          setSelectedSignal(nextDetail || fromCache || null);
+        }
+      } catch (error) {
+        console.error("Failed to load signal detail:", error);
+      } finally {
+        if (!cancelled) {
+          navigate(location.pathname, { replace: true, state: null });
+        }
+      }
+    };
+
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.state, navigate, signals, userId]);
+
   const hasLatestResults = Boolean(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0));
 
   useEffect(() => {
@@ -200,6 +269,9 @@ const Signals = () => {
       setLastBatchResults([]);
       setLastResultsSaved(Boolean(saveToDb));
       setShowResultFocus(Boolean(result));
+      if (result?.signal_id || result?.id) {
+        storeTranscript(result.signal_id || result.id, transcript);
+      }
       // result: SignalResponse { signal (bool), currency_pair, direction,
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
@@ -235,6 +307,11 @@ const Signals = () => {
       setLastSingleResult(null);
       setLastResultsSaved(Boolean(batchSaveToDB));
       setShowResultFocus(true);
+      if (Array.isArray(result?.signals)) {
+        result.signals.forEach((signal, index) => {
+          storeTranscript(signal?.signal_id || signal?.id, valid[index]?.text || "");
+        });
+      }
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
         `Batch complete � ${result.signals_found}/${result.total} signals found`,
@@ -294,10 +371,10 @@ const Signals = () => {
   return (
     <div className="relative">
       {showResultFocus && hasLatestResults && (
-        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-8 md:pt-12">
+        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 md:p-8">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-3xl" onClick={() => setShowResultFocus(false)} />
-          <div className="relative z-10 w-full max-w-4xl space-y-4">
-            <div className="flex items-center justify-between px-1">
+          <div className="relative z-10 w-full max-w-4xl h-full max-h-[calc(100vh-2rem)] flex flex-col bg-transparent">
+            <div className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-3 py-3 flex items-center justify-between">
               <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
                 Latest Extraction Result
               </h3>
@@ -308,12 +385,16 @@ const Signals = () => {
                 Close
               </button>
             </div>
-            {lastSingleResult && (
-              <SignalResult signal={lastSingleResult} user={user} />
-            )}
-            {lastBatchResults && lastBatchResults.map((r, i) => (
-              <SignalResult key={`focus-${i}`} signal={r} user={user} />
-            ))}
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-4 pb-10">
+              {lastSingleResult && (
+                <SignalResult signal={lastSingleResult} user={user} />
+              )}
+              {lastBatchResults && lastBatchResults.map((r, i) => (
+                <div key={`focus-${i}`} className="mt-4">
+                  <SignalResult signal={r} user={user} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

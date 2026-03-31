@@ -21,6 +21,8 @@ import { useAuth } from "../../../contexts/AuthContext";
 import Logo from "../../../assets/logo.png";
 import { getConversations as getMentorConversations } from "../../../services/mentorService";
 import { getConversations as getCodegenConversations } from "../../../services/codeGenService";
+import { getUserSignals } from "../../../services/signalService";
+import { getBacktestResults } from "../../../services/backtestService";
 import { formatLongDate } from "../../../utils/formatters";
 import toast from "react-hot-toast";
 
@@ -44,6 +46,8 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const path = location.pathname;
     if (path.includes("/dashboard/mentor")) return "mentor";
     if (path.includes("/dashboard/codegen")) return "codegen";
+    if (path.includes("/dashboard/signals")) return "signals";
+    if (path.includes("/dashboard/backtest")) return "backtest";
     return null;
   }, [location.pathname]);
 
@@ -80,6 +84,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
     if (historyMode === "codegen") {
       navigate("/dashboard/codegen/session/new");
+      return;
+    }
+
+    if (historyMode === "signals") {
+      navigate("/dashboard/signals");
+      return;
+    }
+
+    if (historyMode === "backtest") {
+      navigate("/dashboard/backtest");
     }
   };
 
@@ -120,10 +134,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
       setHistoryLoading(true);
       try {
-        const data =
-          historyMode === "mentor"
-            ? await getMentorConversations(userId)
-            : await getCodegenConversations(userId);
+        let data = [];
+        if (historyMode === "mentor") {
+          data = await getMentorConversations(userId);
+        } else if (historyMode === "codegen") {
+          data = await getCodegenConversations(userId);
+        } else if (historyMode === "signals") {
+          data = await getUserSignals(userId, 50);
+        } else if (historyMode === "backtest") {
+          data = await getBacktestResults(userId, 50, 0);
+        }
 
         if (cancelled) return;
 
@@ -137,11 +157,39 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             };
           }
 
+          if (historyMode === "codegen") {
+            return {
+              id: item?.conversation_id || item?.id,
+              title: item?.description || "Logic Session",
+              date: item?.created_at || item?.started_at,
+              href: `/dashboard/codegen/session/${item?.conversation_id || item?.id}`,
+            };
+          }
+
+          if (historyMode === "signals") {
+            return {
+              id: item?.id || item?.signal_id,
+              title:
+                item?.source_label ||
+                item?.company_name ||
+                item?.base_currency ||
+                "Signal",
+              date: item?.created_at || item?.timestamp,
+              href: `/dashboard/signals`,
+            };
+          }
+
           return {
-            id: item?.conversation_id || item?.id,
-            title: item?.description || "Logic Session",
-            date: item?.created_at || item?.started_at,
-            href: `/dashboard/codegen/session/${item?.conversation_id || item?.id}`,
+            id: item?.id || item?.backtest_id,
+            title:
+              item?.strategy_name ||
+              item?.pair ||
+              item?.symbol ||
+              item?.timeframe ||
+              "Backtest",
+            subtitle: item?.status || item?.state || null,
+            date: item?.created_at || item?.timestamp,
+            href: `/dashboard/backtest/${item?.id || item?.backtest_id}`,
           };
         }).filter((item) => item.id);
 
@@ -195,6 +243,12 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       } else if (historyMode === "codegen") {
         const { deleteConversation } = await import("../../../services/codeGenService");
         await deleteConversation(item.id, userId);
+      } else if (historyMode === "signals") {
+        const { deleteSignal } = await import("../../../services/signalService");
+        await deleteSignal(userId, item.id);
+      } else if (historyMode === "backtest") {
+        const { deleteBacktest } = await import("../../../services/backtestService");
+        await deleteBacktest(userId, item.id);
       }
 
       setHistoryItems((prev) => prev.filter((entry) => entry.id !== item.id));
@@ -209,6 +263,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           navigate("/dashboard/mentor/messages/new");
         } else if (historyMode === "codegen") {
           navigate("/dashboard/codegen/session/new");
+        } else if (historyMode === "signals") {
+          navigate("/dashboard/signals");
+        } else if (historyMode === "backtest") {
+          navigate("/dashboard/backtest");
         }
       }
 
@@ -326,6 +384,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     <div key={item.id} className="relative group">
                       <NavLink
                         to={item.href}
+                        state={historyMode === "signals" ? { selectedSignalId: item.id } : undefined}
                         className={({ isActive }) =>
                           `block px-3 py-2 rounded-lg text-sm transition-colors ${
                             isActive
@@ -338,11 +397,17 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                           {isStarred && <FiStar className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
                           <span className="truncate">{displayTitle}</span>
                         </div>
-                        {item.date && (
-                          <div className="text-[10px] text-gray-600 mt-1">
-                            {formatLongDate(item.date)}
-                          </div>
-                        )}
+                      {(item.subtitle || item.date) && (
+                        <div className="text-[10px] text-gray-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                          {item.subtitle && (
+                            <span className="uppercase tracking-widest text-[9px] text-yellow-500/70">
+                              {String(item.subtitle)}
+                            </span>
+                          )}
+                          {item.subtitle && item.date && <span className="text-white/10">•</span>}
+                          {item.date && <span>{formatLongDate(item.date)}</span>}
+                        </div>
+                      )}
                       </NavLink>
 
                       <button
