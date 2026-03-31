@@ -760,7 +760,7 @@ const Signals = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-4xl bg-transparent z-10 max-h-[calc(100vh-2.5rem)] h-[calc(100vh-2.5rem)] overflow-y-auto custom-scrollbar flex flex-col"
+              className="relative w-full max-w-4xl bg-transparent z-10 max-h-[calc(100vh-2.5rem)] overflow-y-auto custom-scrollbar pr-2"
             >
               <button
                 onClick={() => setSelectedSignal(null)}
@@ -769,16 +769,18 @@ const Signals = () => {
                 <FiX size={16} />
               </button>
 
-              <SignalResult signal={selectedSignal} user={user} />
+              <div className="pt-12 pb-24 px-2 space-y-4">
+                <SignalResult signal={selectedSignal} user={user} />
 
-              <div className="mt-4 px-1">
-                <button
-                  onClick={() => handleDelete(selectedSignal.signal_id)}
-                  className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em]"
-                >
-                  <FiTrash2 className="inline mr-2" size={13} />
-                  Purge Intelligence
-                </button>
+                <div className="px-1">
+                  <button
+                    onClick={() => handleDelete(selectedSignal.signal_id)}
+                    className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em]"
+                  >
+                    <FiTrash2 className="inline mr-2" size={13} />
+                    Purge Intelligence
+                  </button>
+                </div>
               </div>
             </Motion.div>
           </div>

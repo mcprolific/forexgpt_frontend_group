@@ -292,21 +292,37 @@ export const getCodeConversationHistory = async (conversationId, userId) => {
 };
 
 export const deleteConversation = async (conversationId, userId) => {
-  const res = await axiosInstance.delete(
-    `/codegen/conversations/${userId}/${conversationId}`
-  );
+  let response = null;
+  const endpoints = [
+    `/codegen/conversations/${userId}/${conversationId}`,
+    `/codegen/codes/${userId}/${conversationId}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      response = await axiosInstance.delete(url);
+      break;
+    } catch (error) {
+      if ([404, 405].includes(error?.response?.status)) {
+        continue;
+      }
+      throw error;
+    }
+  }
 
   if (typeof localStorage !== "undefined") {
     writeCachedSessionList(
       userId,
       readCachedSessionList(userId).filter(
-        (session) => session.conversation_id !== conversationId
+        (session) =>
+          session.conversation_id !== conversationId &&
+          session.id !== conversationId
       )
     );
     localStorage.removeItem(getCodeGenHistoryCacheKey(conversationId));
   }
 
-  return res.data;
+  return response?.data;
 };
 
 export const getGeneratedCodeDetail = async (codeId, userId) => {

@@ -66,12 +66,12 @@ const DashboardLayout = () => {
       <div className="flex-1 flex flex-col min-w-0 relative z-10 transition-all duration-300">
         <Navbar isOpen={isOpen} onMenuClick={toggleSidebar} />
 
-        <main className="flex-1 overflow-y-auto pt-24 pb-12 px-4 md:px-6 lg:px-8">
+        <main className="flex-1 overflow-y-auto pt-24 pb-12 px-4 md:px-6 lg:px-8 min-h-0 flex flex-col">
           <Motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="max-w-[1600px] mx-auto"
+            className="max-w-[1600px] mx-auto w-full flex-1 min-h-0 flex flex-col"
           >
             <Outlet />
           </Motion.div>

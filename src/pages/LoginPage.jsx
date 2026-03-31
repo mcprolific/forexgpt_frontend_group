@@ -76,7 +76,7 @@ const LoginPage = () => {
     if (e.email || e.password) return;
 
       try {
-        const result = await dispatch(login({ email, password })).unwrap();
+        const result = await dispatch(login({ email, password, rememberMe })).unwrap();
         if (!result?.token) {
           setFormError("Invalid login details. Please check your email and password and try again.");
           show("Invalid login details. Please try again.", "error");
