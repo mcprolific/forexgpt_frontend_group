@@ -98,6 +98,16 @@ const SignalResult = ({ signal, user }) => {
     userId: user?.user_id || user?.id,
   };
 
+  const transcriptText =
+    signal.transcript ||
+    signal.raw_transcript ||
+    signal.source_transcript ||
+    signal.source_text ||
+    signal.raw_text ||
+    signal.raw_response?.transcript ||
+    signal.raw_response?.text ||
+    '';
+
   const dir = DIR_CONFIG[data.direction] || DIR_CONFIG.NEUTRAL;
   const DirIcon = dir.icon;
 
@@ -202,6 +212,20 @@ const SignalResult = ({ signal, user }) => {
         </div>
 
         {/* ── Action buttons ── */}
+        {transcriptText && (
+          <div className="rounded-2xl bg-black/30 border border-white/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                Transcript Used
+              </span>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {transcriptText}
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3 pt-2 border-t border-white/5">
           <button
             onClick={handleLearnAboutSignal}

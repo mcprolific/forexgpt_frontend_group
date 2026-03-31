@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
-  FiBarChart2, FiPlus, FiMoreVertical, FiTrash2,
-  FiMenu, FiX, FiClock, FiCheckCircle, FiXCircle,
-  FiPlay, FiDownload, FiEye, FiTrendingUp, FiRefreshCw
+  FiBarChart2, FiPlus,
+  FiRefreshCw
 } from 'react-icons/fi';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getBacktestResults } from '../../../services/backtestService';
 
@@ -15,7 +14,7 @@ const GOLD_LIGHT = "#FFD700";
 
 const BacktestLayout = () => {
   const { user } = useAuth();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen] = useState(false);
   const [backtests, setBacktests] = useState([]);
   const [loading, setLoading] = useState(false);
   const { backtestId } = useParams();
@@ -51,38 +50,16 @@ const BacktestLayout = () => {
   return (
     <div className="flex h-full rounded-3xl border border-white/5 overflow-hidden bg-black/20 backdrop-blur-sm relative">
 
-      {isSidebarOpen && (
-        <div
-          onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden cursor-pointer"
-        />
-      )}
-
-      {/* Sidebar Toggle for Mobile */}
-      <AnimatePresence>
-        {!isSidebarOpen && (
-          <Motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={() => setIsSidebarOpen(true)}
-            className="absolute left-4 top-4 z-50 p-3 rounded-xl bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 md:hidden"
-          >
-            <FiMenu className="w-5 h-5" />
-          </Motion.button>
-        )}
-      </AnimatePresence>
+      {/* Backtest sidebar + hamburger removed */}
 
       <Motion.aside
         initial={false}
         animate={{
-          width: isSidebarOpen ? (window.innerWidth < 768 ? '300px' : '320px') : '0px',
-          x: isSidebarOpen ? 0 : (window.innerWidth < 768 ? -300 : 0)
+          width: '0px',
+          x: window.innerWidth < 768 ? -300 : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`bg-[#080808] border-r border-white/5 flex flex-col h-full overflow-hidden z-40
-          ${window.innerWidth < 768 ? 'fixed left-0 top-0 shadow-2xl' : 'relative'}
-        `}
+        className="hidden"
       >
         <div className="w-[300px] md:w-80 flex flex-col h-full">
           {/* Header */}
@@ -180,15 +157,6 @@ const BacktestLayout = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full bg-transparent relative min-w-0">
-        {/* Toggle Button */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 p-1.5 bg-black border border-white/10 rounded-full hover:border-yellow-500/50 transition-all shadow-xl hidden lg:flex
-            ${!isSidebarOpen ? 'translate-x-[20px]' : ''}`}
-        >
-          {isSidebarOpen ? <FiX className="w-3.5 h-3.5 text-yellow-500" /> : <FiMenu className="w-3.5 h-3.5 text-yellow-500" />}
-        </button>
-
         <main className="flex-1 overflow-y-auto h-full p-4 md:p-8 lg:p-12">
           <Outlet />
         </main>
