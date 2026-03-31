@@ -1,17 +1,29 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { loginAPI, registerAPI, confirmEmailAPI } from "./authAPI";
 
-const storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
-const storedRefreshToken = typeof localStorage !== "undefined" ? localStorage.getItem("refresh_token") : null;
-const storedTokenExpiresAt = typeof localStorage !== "undefined" ? localStorage.getItem("token_expires_at") : null;
-const storedUser = typeof localStorage !== "undefined" ? (() => {
+const readStorageValue = (key) => {
+  if (typeof localStorage === "undefined" || typeof sessionStorage === "undefined") {
+    return null;
+  }
+  return localStorage.getItem(key) || sessionStorage.getItem(key);
+};
+
+const readStoredUser = () => {
+  if (typeof localStorage === "undefined" || typeof sessionStorage === "undefined") {
+    return null;
+  }
   try {
-    const raw = localStorage.getItem("user");
+    const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
-})() : null;
+};
+
+const storedToken = readStorageValue("token");
+const storedRefreshToken = readStorageValue("refresh_token");
+const storedTokenExpiresAt = readStorageValue("token_expires_at");
+const storedUser = readStoredUser();
 
 const initialState = {
   user: storedUser,
@@ -78,6 +90,12 @@ const authSlice = createSlice({
         localStorage.removeItem("token_expires_at");
         localStorage.removeItem("user");
       }
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("refresh_token");
+        sessionStorage.removeItem("token_expires_at");
+        sessionStorage.removeItem("user");
+      }
     },
   },
   extraReducers: (builder) => {
@@ -94,18 +112,25 @@ const authSlice = createSlice({
         const expiresIn = action.payload?.expiresIn || null;
         const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
-        if (token && typeof localStorage !== "undefined") {
-          localStorage.setItem("token", token);
+        const remember = Boolean(action.meta?.arg?.rememberMe);
+        const storage =
+          typeof localStorage !== "undefined" && remember
+            ? localStorage
+            : typeof sessionStorage !== "undefined"
+              ? sessionStorage
+              : null;
+        if (storage && token) {
+          storage.setItem("token", token);
         }
-        if (refreshToken && typeof localStorage !== "undefined") {
-          localStorage.setItem("refresh_token", refreshToken);
+        if (storage && refreshToken) {
+          storage.setItem("refresh_token", refreshToken);
         }
-        if (expiresAt && typeof localStorage !== "undefined") {
-          localStorage.setItem("token_expires_at", String(expiresAt));
+        if (storage && expiresAt) {
+          storage.setItem("token_expires_at", String(expiresAt));
         }
-        if (user && typeof localStorage !== "undefined") {
+        if (storage && user) {
           try {
-            localStorage.setItem("user", JSON.stringify(user));
+            storage.setItem("user", JSON.stringify(user));
           } catch {
             // ignore
           }
@@ -144,18 +169,25 @@ const authSlice = createSlice({
         const expiresIn = action.payload?.tokens?.expires_in || null;
         const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
-        if (token && typeof localStorage !== "undefined") {
-          localStorage.setItem("token", token);
+        const remember = Boolean(action.meta?.arg?.rememberMe);
+        const storage =
+          typeof localStorage !== "undefined" && remember
+            ? localStorage
+            : typeof sessionStorage !== "undefined"
+              ? sessionStorage
+              : null;
+        if (storage && token) {
+          storage.setItem("token", token);
         }
-        if (refreshToken && typeof localStorage !== "undefined") {
-          localStorage.setItem("refresh_token", refreshToken);
+        if (storage && refreshToken) {
+          storage.setItem("refresh_token", refreshToken);
         }
-        if (expiresAt && typeof localStorage !== "undefined") {
-          localStorage.setItem("token_expires_at", String(expiresAt));
+        if (storage && expiresAt) {
+          storage.setItem("token_expires_at", String(expiresAt));
         }
-        if (user && typeof localStorage !== "undefined") {
+        if (storage && user) {
           try {
-            localStorage.setItem("user", JSON.stringify(user));
+            storage.setItem("user", JSON.stringify(user));
           } catch {
             // ignore
           }
