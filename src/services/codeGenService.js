@@ -223,6 +223,8 @@ export const getConversations = async (userId, limit = 20) => {
       `/codegen/codes/${userId}?limit=${limit}`,
       `/codegen/codes/${userId}`,
       `/codegen/conversations/${userId}`,
+      `/codegen/codes?user_id=${userId}&limit=${limit}`,
+      `/codegen/conversations?user_id=${userId}`,
     ];
 
     for (const url of candidates) {

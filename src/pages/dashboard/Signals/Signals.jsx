@@ -127,7 +127,19 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
 // --- Main Page ----------------------------------------------------------------
 const Signals = () => {
   const { user } = useSelector((state) => state.auth);
-  const userId = user?.user_id || user?.id;
+  const readStoredUserId = () => {
+    if (typeof localStorage === "undefined" || typeof sessionStorage === "undefined") {
+      return null;
+    }
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed?.user_id || parsed?.id || null;
+    } catch {
+      return null;
+    }
+  };
+  const userId = user?.user_id || user?.id || readStoredUserId();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -261,6 +273,10 @@ const Signals = () => {
   // { transcript, company_name, user_id, save_to_db }
   const handleSingleExtract = async () => {
     if (!transcript.trim()) { toast.error('Paste a transcript first'); return; }
+    if (saveToDb && !userId) {
+      toast.error('Please log in to save signals');
+      return;
+    }
     setExtracting(true);
     const t = toast.loading('Synthesizing neural signals...');
     try {
@@ -285,6 +301,9 @@ const Signals = () => {
       setTranscript('');
       setCompanyName('');
       await fetchAll();
+      if (saveToDb && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("fgpt-signal-history-updated"));
+      }
     } catch (err) {
       toast.error(`Extraction failed: ${err.response?.data?.detail || err.message}`, { id: t });
       setErrorMessage('Extraction failed. Please try again.');
@@ -299,6 +318,10 @@ const Signals = () => {
   const handleBatchExtract = async () => {
     const valid = batchEntries.filter(e => e.text.trim());
     if (valid.length === 0) { toast.error('Add at least one transcript entry'); return; }
+    if (batchSaveToDB && !userId) {
+      toast.error('Please log in to save signals');
+      return;
+    }
     setExtracting(true);
     const t = toast.loading(`Processing ${valid.length} transcript${valid.length > 1 ? 's' : ''}...`);
     try {
@@ -319,6 +342,9 @@ const Signals = () => {
       );
       setBatchEntries([{ company_name: '', text: '' }]);
       await fetchAll();
+      if (batchSaveToDB && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("fgpt-signal-history-updated"));
+      }
     } catch (err) {
       toast.error(`Batch failed: ${err.response?.data?.detail || err.message}`, { id: t });
       setErrorMessage('Batch failed. Please try again.');
@@ -335,6 +361,9 @@ const Signals = () => {
       toast.success('Signal purged');
       setSignals(prev => prev.filter(s => s.signal_id !== signalId));
       if (selectedSignal?.signal_id === signalId) setSelectedSignal(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("fgpt-signal-history-updated"));
+      }
     } catch {
       toast.error('Failed to purge signal');
       setErrorMessage('Failed to delete signal. Please try again.');
