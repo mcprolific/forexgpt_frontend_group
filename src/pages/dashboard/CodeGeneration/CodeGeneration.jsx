@@ -26,6 +26,8 @@ import {
   generateCode as askArchitect,
   improveStrategy,
   getCodeGenHistoryCacheKey,
+  getConversations,
+  updateGeneratedCode,
 } from "../../../services/codeGenService";
 import { formatLongDateTime } from "../../../utils/formatters";
 
@@ -43,6 +45,8 @@ const formatSummaryMetric = (value, decimals = 2) =>
   value != null && value !== "" ? Number(value).toFixed(decimals) : "N/A";
 
 const getDraftKey = (userId) => `fgpt_codegen_draft_${userId || "anon"}`;
+const getLastConversationKey = (userId) =>
+  `fgpt_codegen_last_conversation_${userId || "anon"}`;
 
 const parseStoredMessages = (raw) => {
   if (!raw) return [];
@@ -87,12 +91,24 @@ const CodeGeneration = () => {
     if (!Object.keys(state).length) return;
 
     if (state.fromMentor) {
-      // Use the pre-built strategyText prompt passed from MentorMessages
-      const prompt = state.strategyText || "";
-      if (prompt) setNewMessage(prompt);
+      const strategyType = state.strategyType || '';
+      const context = state.context || state.strategyText || '';
+      const mentorPrompt = strategyType
+        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
+        : context
+          ? `Create a trading strategy based on: ${context}`
+          : '';
+
+      if (mentorPrompt) {
+        setNewMessage(mentorPrompt);
+      }
     }
 
+<<<<<<< HEAD
     if (state.prefilledDescription) {
+=======
+    if (state.fromSignals && state.prefilledDescription) {
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
       setNewMessage(state.prefilledDescription);
     }
 
@@ -176,6 +192,14 @@ const CodeGeneration = () => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${next}px`;
+  }, [newMessage]);
+
   const handleCopy = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -244,27 +268,47 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-        setMessages((prev) => {
-          const next = [...prev, assistantMsg];
-          const targetConversationId =
-            conversationId === "new" ? response.conversation_id : conversationId;
-
-          if (targetConversationId) {
-            localStorage.setItem(
-              getCodeGenHistoryCacheKey(targetConversationId),
-              JSON.stringify(next)
-            );
+<<<<<<< HEAD
+          // Always append the assistant reply first so the user sees it,
+          // then update the URL if this was a brand-new conversation.
+          setMessages((prev) => [...prev, assistantMsg]);
+          if (assistantMsg.code) {
+            setLatestGeneratedCode(assistantMsg.code);
           }
+=======
+        // Always append the assistant reply first so the user sees it,
+        // then update the URL if this was a brand-new conversation.
+        setMessages((prev) => [...prev, assistantMsg]);
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
 
-          return next;
-        });
-
-        if (conversationId === "new") {
-          localStorage.removeItem(getDraftKey(userId));
+        if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
             state: { skipFetch: true },
           });
+        } else if (conversationId && userId) {
+          localStorage.setItem(getLastConversationKey(userId), conversationId);
+        }
+
+        if (userId && response.conversation_id) {
+          try {
+            const latest = await getConversations(userId);
+            const exists = (latest || []).some(
+              (item) => item?.conversation_id === response.conversation_id
+            );
+            if (!exists && response.code_id) {
+              await updateGeneratedCode(response.code_id, userId, {
+                conversation_id: response.conversation_id,
+                description: userContent,
+              });
+              await getConversations(userId);
+            }
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("fgpt-codegen-history-updated"));
+            }
+          } catch (error) {
+            console.error("Failed to persist codegen history:", error);
+          }
         }
       } else {
         setErrorMessage("The server returned an unexpected response.");
@@ -778,15 +822,20 @@ const CodeGeneration = () => {
 
         {!improvementMode && (
           <div className="relative group">
-            <input
-              type="text"
+            <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               disabled={sending}
               placeholder="Input neural logic query..."
               ref={inputRef}
-              className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
-              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              rows={1}
+              className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50 resize-none overflow-y-auto"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
             />
             <button
               onClick={handleSendMessage}

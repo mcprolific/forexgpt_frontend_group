@@ -1,87 +1,12 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import {
-  FiTrendingUp, FiTrendingDown, FiMinus,
-  FiCpu, FiMessageCircle, FiCode
-} from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 
-// ─── Direction config ─────────────────────────────────────────────────────────
-const DIR_CONFIG = {
-  LONG: {
-    label: 'LONG',
-    icon: FiTrendingUp,
-    gradient: 'from-green-500/20 to-green-500/5',
-    border: 'border-green-500/30',
-    badge: 'bg-green-500/20 text-green-400 border border-green-500/30',
-    dot: 'bg-green-500',
-    text: 'text-green-400',
-    glow: 'shadow-green-500/10',
-  },
-  SHORT: {
-    label: 'SHORT',
-    icon: FiTrendingDown,
-    gradient: 'from-red-500/20 to-red-500/5',
-    border: 'border-red-500/30',
-    badge: 'bg-red-500/20 text-red-400 border border-red-500/30',
-    dot: 'bg-red-500',
-    text: 'text-red-400',
-    glow: 'shadow-red-500/10',
-  },
-  NEUTRAL: {
-    label: 'NEUTRAL',
-    icon: FiMinus,
-    gradient: 'from-white/5 to-transparent',
-    border: 'border-white/10',
-    badge: 'bg-white/10 text-gray-400 border border-white/10',
-    dot: 'bg-gray-400',
-    text: 'text-gray-400',
-    glow: 'shadow-black/10',
-  },
-};
-
-// ─── Circular confidence ring (pure CSS + SVG) ────────────────────────────────
-const ConfidenceRing = ({ pct }) => {
-  const radius = 28;
-  const circ = 2 * Math.PI * radius;
-  const dash = (pct / 100) * circ;
-
-  const color = pct >= 70 ? '#22c55e' : pct >= 45 ? '#D4AF37' : '#ef4444';
-
-  return (
-    <div className="relative flex items-center justify-center w-20 h-20">
-      <svg width="80" height="80" className="-rotate-90" style={{ position: 'absolute' }}>
-        {/* Track */}
-        <circle cx={40} cy={40} r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={6} />
-        {/* Arc */}
-        <circle
-          cx={40} cy={40} r={radius} fill="none"
-          stroke={color} strokeWidth={6}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 0.8s ease' }}
-        />
-      </svg>
-      <div className="relative z-10 text-center">
-        <div className="text-lg font-black text-white leading-none">{pct}%</div>
-        <div className="text-[8px] font-bold text-gray-500 uppercase tracking-wider">Conf.</div>
-      </div>
-    </div>
-  );
-};
-
-// ─── Tag pill ─────────────────────────────────────────────────────────────────
-const Tag = ({ label, value }) => (
-  <div className="flex flex-col items-center px-4 py-2 rounded-xl bg-white/[0.04] border border-white/5 min-w-[80px]">
-    <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-0.5">{label}</span>
-    <span className="text-[11px] font-black text-white uppercase">{value || '—'}</span>
-  </div>
-);
-
-// ─── Main component ───────────────────────────────────────────────────────────
 const SignalResult = ({ signal, user }) => {
-  const navigate = useNavigate();
-  if (!signal) return null;
+    const navigate = useNavigate();
+    if (!signal) return null;
+    const navigate = useNavigate();
 
   const data = {
     company: signal.company_name || signal.source_label || 'Unknown',

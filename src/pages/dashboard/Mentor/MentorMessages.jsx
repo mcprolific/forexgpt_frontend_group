@@ -12,11 +12,14 @@ import {
 import { motion as Motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   analyzeBacktest,
   getConversationHistory,
+  getConversations,
+  getMentorConversationCacheKey,
 } from '../../../services/mentorService';
 import { streamMentorResponse } from '../../../features/mentor/mentorStream';
 import toast from 'react-hot-toast';
@@ -103,6 +106,28 @@ const MarkdownComponents = {
       {children}
     </blockquote>
   ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-4 rounded-xl border border-white/10">
+      <table className="min-w-full text-xs text-left text-gray-200">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-gray-400">
+      {children}
+    </thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody className="divide-y divide-white/10">{children}</tbody>
+  ),
+  tr: ({ children }) => <tr className="hover:bg-white/5">{children}</tr>,
+  th: ({ children }) => (
+    <th className="px-3 py-2 font-bold text-gray-300">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 text-gray-200 align-top">{children}</td>
+  ),
   strong: ({ children }) => (
     <strong className="font-bold text-white">{children}</strong>
   ),
@@ -111,6 +136,10 @@ const MarkdownComponents = {
   ),
   code({ className, children, ...props }) {
     const match = /language-(\w+)/.exec(className || '');
+    if (match && match[1] === 'mermaid') {
+      const diagram = String(children).replace(/\n$/, '');
+      return <MermaidBlock diagram={diagram} />;
+    }
     return match ? (
       <div className="rounded-lg overflow-hidden my-4 border border-white/10 relative group/code">
         <div className="absolute right-2 top-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
@@ -151,6 +180,217 @@ const MarkdownComponents = {
   },
 };
 
+const shouldRequestDiagram = (text) =>
+  /(diagram|chart|flowchart|graph|plot|visual|timeline|mermaid)/i.test(text || '');
+
+const stripDiagramDirective = (text) => {
+  if (!text) return text;
+  return String(text).replace(
+    /\n\nReturn ONLY a Mermaid diagram[\s\S]*$/i,
+    ''
+  );
+};
+
+const MERMAID_KEYWORDS =
+  /(gantt|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|pie)/i;
+const hasMermaidFence = (text) => /```mermaid[\s\S]*?```/i.test(text || '');
+const looksLikeMermaid = (text) => MERMAID_KEYWORDS.test(text || '');
+
+const cleanMermaidLines = (lines) =>
+  lines.filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    if (/^mermaid diagram$/i.test(trimmed)) return false;
+    if (/^copy$/i.test(trimmed)) return false;
+    return true;
+  });
+
+const sanitizeMermaidDiagram = (text) => {
+  if (!text) return '';
+  const cleaned = String(text)
+    .replace(/```/g, '')
+    .replace(/\r/g, '')
+    .trim();
+  const lines = cleanMermaidLines(cleaned.split('\n'));
+  return lines.join('\n').trim();
+};
+
+const simplifyMermaidDiagram = (text) => {
+  const raw = sanitizeMermaidDiagram(text);
+  if (!raw) return '';
+  const lines = raw.split('\n');
+  const keep = lines.filter((line) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|journey|pie)\b/i.test(t)) return true;
+    if (/^(subgraph|end|direction)\b/i.test(t)) return true;
+    if (/^%%/.test(t)) return true;
+    if (/-->|---|==>|-.->/.test(t)) return true;
+    if (/^\w+[\[(]/.test(t)) return true;
+    return false;
+  });
+  return keep.join('\n').trim();
+};
+
+const extractMermaidBlock = (text) => {
+  if (!text) return { markdown: text, diagram: null };
+  const normalized = ensureMermaidFence(text);
+  const match = normalized.match(/```mermaid\s*([\s\S]*?)```/i);
+  if (!match) return { markdown: normalized, diagram: null };
+  const diagram = match[1].trim();
+  const markdown = normalized.replace(match[0], '').trim();
+  return { markdown, diagram: diagram || null };
+};
+
+const ensureMermaidFence = (text) => {
+  if (!text || hasMermaidFence(text)) return text;
+  if (!looksLikeMermaid(text)) return text;
+
+  const rawLines = String(text).split('\n');
+  const lines = cleanMermaidLines(rawLines);
+  const startIdx = lines.findIndex((line) => MERMAID_KEYWORDS.test(line));
+  if (startIdx === -1) return text;
+
+  const before = lines.slice(0, startIdx).join('\n').trimEnd();
+  const diagram = lines.slice(startIdx).join('\n').trimEnd();
+
+  return `${before}\n\n\`\`\`mermaid\n${diagram}\n\`\`\``.trim();
+};
+
+const MermaidBlock = ({ diagram }) => {
+  const [svgMarkup, setSvgMarkup] = useState('');
+  const [renderError, setRenderError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const render = async () => {
+      if (typeof window === 'undefined') return;
+      setSvgMarkup('');
+      setRenderError('');
+      let mermaid = window.mermaid;
+      if (!mermaid?.render) {
+        try {
+          const mod = await import('mermaid');
+          mermaid = mod?.default || mod;
+          if (mermaid?.initialize) {
+            mermaid.initialize({
+              startOnLoad: false,
+              theme: 'dark',
+              securityLevel: 'loose',
+            });
+          }
+          window.mermaid = mermaid;
+        } catch (error) {
+          console.error('Mermaid library unavailable:', error);
+          setRenderError('Mermaid library failed to load.');
+          return;
+        }
+      }
+
+      try {
+        const id = `mermaid-${Math.random().toString(36).slice(2)}`;
+        const renderFn = mermaid.render;
+        const legacyRender = mermaid.mermaidAPI?.render;
+        let svg = '';
+
+        const attemptRender = async (source) => {
+          const safeSource = sanitizeMermaidDiagram(source);
+          if (!safeSource) return '';
+
+          if (mermaid.parse) {
+            await mermaid.parse(safeSource);
+          }
+
+          if (renderFn) {
+            const result = await renderFn.call(mermaid, id, safeSource);
+            return typeof result === 'string' ? result : result?.svg || '';
+          }
+
+          if (legacyRender) {
+            let legacySvg = '';
+            await new Promise((resolve) => {
+              legacyRender.call(mermaid.mermaidAPI, id, safeSource, (code) => {
+                legacySvg = code || '';
+                resolve();
+              });
+            });
+            return legacySvg;
+          }
+
+          if (mermaid.run) {
+            const temp = document.createElement('div');
+            temp.style.position = 'absolute';
+            temp.style.left = '-9999px';
+            temp.style.top = '-9999px';
+            temp.innerHTML = `<pre class="mermaid">${safeSource}</pre>`;
+            document.body.appendChild(temp);
+            try {
+              await mermaid.run({ nodes: [temp] });
+              const svgEl = temp.querySelector('svg');
+              return svgEl ? svgEl.outerHTML : '';
+            } finally {
+              document.body.removeChild(temp);
+            }
+          }
+
+          return '';
+        };
+
+        svg = await attemptRender(diagram);
+        if (!svg) {
+          svg = await attemptRender(simplifyMermaidDiagram(diagram));
+        }
+
+        if (!svg) {
+          setRenderError('Mermaid did not return an SVG.');
+          return;
+        }
+        if (cancelled) return;
+        setSvgMarkup(svg);
+      } catch (error) {
+        console.error('Mermaid render failed:', error);
+        setRenderError('Mermaid could not render this diagram.');
+      }
+    };
+
+    render();
+    return () => {
+      cancelled = true;
+    };
+  }, [diagram]);
+
+  return (
+    <div className="my-4 rounded-xl border border-white/10 bg-black/40 overflow-hidden">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-gray-500 border-b border-white/10 flex items-center justify-between">
+        <span>Mermaid Diagram</span>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(diagram);
+            toast.success('Diagram copied');
+          }}
+          className="text-gray-400 hover:text-yellow-500 transition-colors"
+        >
+          Copy
+        </button>
+      </div>
+      {svgMarkup ? (
+        <div
+          className="p-4 text-gray-200"
+          dangerouslySetInnerHTML={{ __html: svgMarkup }}
+        />
+      ) : renderError ? (
+        <div className="p-4 text-[11px] text-red-300">{renderError}</div>
+      ) : (
+        <pre className="p-4 text-[11px] text-gray-300 whitespace-pre-wrap">
+          {diagram}
+        </pre>
+      )}
+    </div>
+  );
+};
+
+
 const MentorMessages = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -171,8 +411,76 @@ const MentorMessages = () => {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const streamAccumulator = useRef('');
+  const activeConversationIdRef = useRef(activeConversationId);
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
+  const userIdRef = useRef(userId);
+  const lastUserPromptRef = useRef('');
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    setActiveConversationId(conversationId !== 'new' ? conversationId : null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${next}px`;
+  }, [newMessage]);
+
+  const primeMentorConversationCache = useCallback((nextId, preview) => {
+    if (!nextId || !userIdRef.current || typeof localStorage === 'undefined') return;
+
+    const cacheKey = getMentorConversationCacheKey(userIdRef.current);
+    const raw = localStorage.getItem(cacheKey);
+    let list = [];
+    try {
+      list = raw ? JSON.parse(raw) : [];
+    } catch {
+      list = [];
+    }
+    if (!Array.isArray(list)) list = [];
+
+    const match = list.find(
+      (item) =>
+        item?.conversation_id === nextId ||
+        item?.id === nextId ||
+        item?.conversationId === nextId
+    );
+
+    const now = new Date().toISOString();
+    const nextItem = {
+      ...(match || {}),
+      conversation_id: nextId,
+      preview: match?.preview || preview || 'AI Conversation',
+      started_at: match?.started_at || match?.created_at || now,
+      updated_at: now,
+      message_count: Math.max(match?.message_count || 0, 1),
+    };
+
+    const nextList = [
+      nextItem,
+      ...list.filter(
+        (item) =>
+          !(
+            item?.conversation_id === nextId ||
+            item?.id === nextId ||
+            item?.conversationId === nextId
+          )
+      ),
+    ];
+
+    localStorage.setItem(cacheKey, JSON.stringify(nextList));
+  }, []);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -186,6 +494,11 @@ const MentorMessages = () => {
         setMessages(
           parseStoredMessages(localStorage.getItem(getDraftKey(userId)))
         );
+        setLoading(false);
+        return;
+      }
+
+      if (location.state?.skipFetch) {
         setLoading(false);
         return;
       }
@@ -328,6 +641,10 @@ const MentorMessages = () => {
     if (!newMessage.trim() || sending || !userId) return;
 
     const userContent = newMessage.trim();
+    const requestContent = shouldRequestDiagram(userContent)
+      ? `${userContent}\n\nReturn ONLY a Mermaid diagram in a \`\`\`mermaid\`\`\` code block. Use FLOWCHART syntax only and keep it valid Mermaid (no extra commentary or data blocks).`
+      : userContent;
+    lastUserPromptRef.current = userContent;
     const userMsg = {
       id: Date.now().toString(),
       role: 'user',
@@ -354,8 +671,15 @@ const MentorMessages = () => {
     const currentConvId = activeConversationId;
 
     streamMentorResponse({
-      question: userContent,
+      question: requestContent,
       conversationId: currentConvId,
+      userId,
+      onConversationId: (nextId) => {
+        if (!nextId || nextId === activeConversationIdRef.current) return;
+        activeConversationIdRef.current = nextId;
+        setActiveConversationId(nextId);
+        primeMentorConversationCache(nextId, lastUserPromptRef.current);
+      },
       onChunk: (chunk) => {
         streamAccumulator.current += chunk;
         setStreamingContent(streamAccumulator.current);
@@ -371,7 +695,8 @@ const MentorMessages = () => {
 
         setMessages((prev) => {
           const next = [...prev, assistantMessage];
-          const targetId = currentConvId || conversationId;
+          const targetId =
+            activeConversationIdRef.current || currentConvId || conversationId;
           if (targetId && targetId !== 'new') {
             localStorage.setItem(
               `fgpt_mentor_history_${targetId}`,
@@ -385,9 +710,35 @@ const MentorMessages = () => {
         streamAccumulator.current = '';
         setSending(false);
 
+        if (typeof window !== 'undefined' && conversationId === 'new') {
+          (async () => {
+            try {
+              if (activeConversationIdRef.current) {
+                primeMentorConversationCache(
+                  activeConversationIdRef.current,
+                  lastUserPromptRef.current
+                );
+              }
+              if (userIdRef.current) {
+                await getConversations(userIdRef.current);
+              }
+            } catch (error) {
+              console.error('Failed to refresh mentor history:', error);
+            } finally {
+              window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
+            }
+          })();
+        }
+
         // Navigate out of 'new' if we started with it
         if (conversationId === 'new') {
           localStorage.removeItem(getDraftKey(userId));
+          if (activeConversationIdRef.current) {
+            navigate(`/dashboard/mentor/messages/${activeConversationIdRef.current}`, {
+              replace: true,
+              state: { skipFetch: true },
+            });
+          }
         }
       },
       onError: (err) => {
@@ -584,11 +935,19 @@ const MentorMessages = () => {
                       </div>
                     )}
 
-                    <div className="text-sm leading-relaxed max-w-none">
-                      <ReactMarkdown components={MarkdownComponents}>
-                        {message.content}
+                    {(() => {
+                      const { markdown, diagram } = extractMermaidBlock(message.content);
+                      return (
+                        <div className="text-sm leading-relaxed max-w-none">
+                          {diagram && <MermaidBlock diagram={diagram} />}
+                          {markdown && (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
+                        {message.role === 'user' ? stripDiagramDirective(markdown) : markdown}
                       </ReactMarkdown>
-                    </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {(showGenerateCode || showImproveStrategy) && (
                       <div className="mt-4 flex flex-wrap gap-3">
@@ -656,11 +1015,19 @@ const MentorMessages = () => {
                         </span>
                         <div className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
                       </div>}
-                      <div className="text-sm leading-relaxed text-gray-200 max-w-none">
-                        <ReactMarkdown components={MarkdownComponents}>
-                          {streamingContent}
-                        </ReactMarkdown>
-                      </div>
+                      {(() => {
+                        const { markdown, diagram } = extractMermaidBlock(streamingContent);
+                        return (
+                          <div className="text-sm leading-relaxed text-gray-200 max-w-none">
+                            {diagram && <MermaidBlock diagram={diagram} />}
+                            {markdown && (
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
+                                {markdown}
+                              </ReactMarkdown>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="flex gap-2">
@@ -679,15 +1046,20 @@ const MentorMessages = () => {
       {/* Input — at bottom when messages exist, centered when empty */}
       <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0'}`}>
         <div className="relative group w-full max-w-2xl">
-          <input
-            type="text"
+          <textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             disabled={sending}
             placeholder="Input market analysis query..."
             ref={inputRef}
-            className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
-            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            rows={1}
+            className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50 resize-none overflow-y-auto"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
           />
           <button
             type="button"

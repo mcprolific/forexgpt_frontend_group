@@ -156,7 +156,8 @@ export const askMentor = async (message, conversationId, userId) => {
           {
             ...existing,
             conversation_id: nextConversationId,
-            preview: message,
+            // Keep original preview/title once set to avoid changing history name each message
+            preview: existing?.preview || message,
             started_at:
               existing?.started_at ||
               res.data?.started_at ||
@@ -186,8 +187,10 @@ export const getConversations = async (userId) => {
     const candidates = [
       `/mentor/conversations/${userId}`,
       `/mentor/conversations?user_id=${userId}`,
+      `/mentor/conversations?user_id=${userId}&limit=50`,
       `/mentor/history?user_id=${userId}`,
       "/mentor/history",
+      "/mentor/conversations",
     ];
 
     for (const url of candidates) {

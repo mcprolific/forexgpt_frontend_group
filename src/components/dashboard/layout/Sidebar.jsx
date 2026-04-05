@@ -38,6 +38,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [historyMeta, setHistoryMeta] = useState({});
+  const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
   const userId = user?.user_id || user?.id;
 
   const getMetaKey = (id) => `fgpt_sidebar_meta_${id || "anon"}`;
@@ -101,6 +102,24 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     const onClick = () => setOpenMenuId(null);
     window.addEventListener("click", onClick);
     return () => window.removeEventListener("click", onClick);
+  }, []);
+
+  useEffect(() => {
+    const onMentorUpdate = () => setHistoryRefreshTick((t) => t + 1);
+    window.addEventListener("fgpt-mentor-history-updated", onMentorUpdate);
+    return () => window.removeEventListener("fgpt-mentor-history-updated", onMentorUpdate);
+  }, []);
+
+  useEffect(() => {
+    const onSignalUpdate = () => setHistoryRefreshTick((t) => t + 1);
+    window.addEventListener("fgpt-signal-history-updated", onSignalUpdate);
+    return () => window.removeEventListener("fgpt-signal-history-updated", onSignalUpdate);
+  }, []);
+
+  useEffect(() => {
+    const onCodegenUpdate = () => setHistoryRefreshTick((t) => t + 1);
+    window.addEventListener("fgpt-codegen-history-updated", onCodegenUpdate);
+    return () => window.removeEventListener("fgpt-codegen-history-updated", onCodegenUpdate);
   }, []);
 
   useEffect(() => {
@@ -208,7 +227,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     return () => {
       cancelled = true;
     };
-  }, [userId, historyMode, location.pathname]);
+  }, [userId, historyMode, location.pathname, historyRefreshTick]);
 
   const updateMeta = (id, updates) => {
     setHistoryMeta((prev) => ({
