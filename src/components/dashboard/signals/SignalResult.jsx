@@ -1,10 +1,10 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
 const SignalResult = ({ signal, user }) => {
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
     if (!signal) return null;
     const navigate = useNavigate();
 
