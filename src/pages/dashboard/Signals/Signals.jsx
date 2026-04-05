@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FiFilter, FiZap, FiCpu, FiPlus, FiTrash2, FiClock,
   FiActivity, FiTarget, FiX, FiTrendingUp, FiTrendingDown,
@@ -11,6 +12,7 @@ import {
   batchExtract,
   getUserSignals,
   getSignalStats,
+  getSignalDetail,
   deleteSignal,
   buildSignalStats,
 } from '../../../services/signalService';
@@ -126,6 +128,33 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
 const Signals = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const transcriptCacheKey = (id) => `fgpt_signal_transcripts_${id || "anon"}`;
+
+  const readTranscriptCache = () => {
+    if (typeof localStorage === "undefined") return {};
+    try {
+      const raw = localStorage.getItem(transcriptCacheKey(userId));
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const writeTranscriptCache = (next) => {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(transcriptCacheKey(userId), JSON.stringify(next || {}));
+  };
+
+  const storeTranscript = (signalId, text) => {
+    if (!signalId || !text) return;
+    const cache = readTranscriptCache();
+    cache[signalId] = text;
+    writeTranscriptCache(cache);
+  };
 
   // Data
   const [signals, setSignals] = useState([]);
@@ -143,12 +172,12 @@ const Signals = () => {
   // Mode
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
 
-  // Single mode � POST /signals/extract body fields
+  // Single mode � POST /signals/extract body fields
   const [transcript, setTranscript] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [saveToDb, setSaveToDb] = useState(true);
 
-  // Batch mode � POST /signals/batch body: { transcripts: [{text, company_name}] }
+  // Batch mode � POST /signals/batch body: { transcripts: [{text, company_name}] }
   const [batchEntries, setBatchEntries] = useState([
     { company_name: '', text: '' },
   ]);
@@ -181,6 +210,46 @@ const Signals = () => {
 
   useEffect(() => { fetchAll(); }, [userId]);
 
+  useEffect(() => {
+    const selectedId = location.state?.selectedSignalId;
+    if (!selectedId || !userId) return;
+
+    let cancelled = false;
+    const fromCache = signals.find(
+      (s) => s?.signal_id === selectedId || s?.id === selectedId
+    );
+    if (fromCache) setSelectedSignal(fromCache);
+
+    const loadDetail = async () => {
+      try {
+        const detail = await getSignalDetail(userId, selectedId);
+        if (!cancelled) {
+          const cachedTranscript = readTranscriptCache()[selectedId];
+          const nextDetail =
+            cachedTranscript &&
+            detail &&
+            !detail.transcript &&
+            !detail.raw_transcript &&
+            !detail.source_text
+              ? { ...detail, transcript: cachedTranscript }
+              : detail;
+          setSelectedSignal(nextDetail || fromCache || null);
+        }
+      } catch (error) {
+        console.error("Failed to load signal detail:", error);
+      } finally {
+        if (!cancelled) {
+          navigate(location.pathname, { replace: true, state: null });
+        }
+      }
+    };
+
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.state, navigate, signals, userId]);
+
   const hasLatestResults = Boolean(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0));
 
   useEffect(() => {
@@ -200,11 +269,14 @@ const Signals = () => {
       setLastBatchResults([]);
       setLastResultsSaved(Boolean(saveToDb));
       setShowResultFocus(Boolean(result));
+      if (result?.signal_id || result?.id) {
+        storeTranscript(result.signal_id || result.id, transcript);
+      }
       // result: SignalResponse { signal (bool), currency_pair, direction,
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
         toast.success(
-          `Signal detected � ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
+          `Signal detected � ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
           { id: t, duration: 5000 }
         );
       } else {
@@ -235,9 +307,14 @@ const Signals = () => {
       setLastSingleResult(null);
       setLastResultsSaved(Boolean(batchSaveToDB));
       setShowResultFocus(true);
+      if (Array.isArray(result?.signals)) {
+        result.signals.forEach((signal, index) => {
+          storeTranscript(signal?.signal_id || signal?.id, valid[index]?.text || "");
+        });
+      }
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
-        `Batch complete � ${result.signals_found}/${result.total} signals found`,
+        `Batch complete � ${result.signals_found}/${result.total} signals found`,
         { id: t, duration: 5000 }
       );
       setBatchEntries([{ company_name: '', text: '' }]);
@@ -294,10 +371,10 @@ const Signals = () => {
   return (
     <div className="relative">
       {showResultFocus && hasLatestResults && (
-        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-8 md:pt-12">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowResultFocus(false)} />
-          <div className="relative z-10 w-full max-w-4xl space-y-4">
-            <div className="flex items-center justify-between px-1">
+        <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 md:p-8">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-3xl" onClick={() => setShowResultFocus(false)} />
+          <div className="relative z-10 w-full max-w-4xl h-full max-h-[calc(100vh-2rem)] flex flex-col bg-transparent">
+            <div className="sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-white/10 px-3 py-3 flex items-center justify-between">
               <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
                 Latest Extraction Result
               </h3>
@@ -308,17 +385,21 @@ const Signals = () => {
                 Close
               </button>
             </div>
-            {lastSingleResult && (
-              <SignalResult signal={lastSingleResult} user={user} />
-            )}
-            {lastBatchResults && lastBatchResults.map((r, i) => (
-              <SignalResult key={`focus-${i}`} signal={r} user={user} />
-            ))}
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pt-4 pb-10">
+              {lastSingleResult && (
+                <SignalResult signal={lastSingleResult} user={user} />
+              )}
+              {lastBatchResults && lastBatchResults.map((r, i) => (
+                <div key={`focus-${i}`} className="mt-4">
+                  <SignalResult signal={r} user={user} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      <div className={`space-y-8 max-w-6xl mx-auto pb-24 transition-all ${showResultFocus && hasLatestResults ? 'blur-sm pointer-events-none select-none' : ''}`} aria-hidden={showResultFocus && hasLatestResults}>
+      <div className={`space-y-8 max-w-6xl mx-auto pb-24 transition-all ${showResultFocus && hasLatestResults ? 'blur-xl pointer-events-none select-none' : ''}`} aria-hidden={showResultFocus && hasLatestResults}>
 
       {/* -- Header ----------------------------------------------------------- */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -334,7 +415,7 @@ const Signals = () => {
           <p className="text-white-500 text-sm mt-1 font-bold uppercase tracking-widest">Institutional Forex Alpha From Earnings Transcripts</p>
         </div>
 
-        {/* Stats � SignalStatisticsResponse */}
+        {/* Stats � SignalStatisticsResponse */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/[0.02] border border-white/5 p-4 rounded-3xl">
           <div className="text-center px-3">
             <div className="text-[9px] font-black text-white-600 uppercase tracking-tighter mb-1">Total</div>
@@ -358,6 +439,66 @@ const Signals = () => {
       {errorMessage && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
           {errorMessage}
+        </div>
+      )}
+
+      {/* Latest Results (moved to top) */}
+      {(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0)) && (
+        <div className="rounded-[20px] border border-yellow-500/30 bg-yellow-500/5 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
+              {lastResultsSaved ? 'Latest Saved Results' : 'Unsaved Results'}
+            </h3>
+            <span className="text-[10px] font-black text-yellow-500/70">
+              {(lastBatchResults?.length || 0) + (lastSingleResult ? 1 : 0)}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {lastSingleResult && (
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-black/40">
+                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
+                  {lastSingleResult.direction === 'LONG' ? <FiTrendingUp className="text-green-500" /> :
+                    lastSingleResult.direction === 'SHORT' ? <FiTrendingDown className="text-red-500" /> :
+                      <FiMinus className="text-white-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white truncate">
+                      {lastSingleResult.currency_pair || 'PAIR'} ï¿½ {lastSingleResult.direction || 'ï¿½'}
+                    </span>
+                    <span className="text-[10px] font-black text-yellow-500">
+                      {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : 'ï¿½'}
+                    </span>
+                  </div>
+                  {lastSingleResult.reasoning && (
+                    <p className="text-[11px] text-white-400 mt-1">{lastSingleResult.reasoning}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {lastBatchResults && lastBatchResults.length > 0 && lastBatchResults.map((r, i) => (
+              <div key={`unsaved-${i}`} className="flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-black/40">
+                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
+                  {r.direction === 'LONG' ? <FiTrendingUp className="text-green-500" /> :
+                    r.direction === 'SHORT' ? <FiTrendingDown className="text-red-500" /> :
+                      <FiMinus className="text-white-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white truncate">
+                      {r.currency_pair || 'PAIR'} ï¿½ {r.direction || 'ï¿½'}
+                    </span>
+                    <span className="text-[10px] font-black text-yellow-500">
+                      {r.confidence != null ? Math.round(r.confidence * 100) + '%' : 'ï¿½'}
+                    </span>
+                  </div>
+                  {r.reasoning && (
+                    <p className="text-[11px] text-white-400 mt-1">{r.reasoning}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -564,12 +705,12 @@ const Signals = () => {
         {/* -- Right: Signals Stream --------------------------------------------- */}
         <div className="lg:col-span-7 space-y-5">
 
-          {/* Latest Results */}
+          {/* Latest Result (Pinned to Saved Signals Top) */}
           {(lastSingleResult || (lastBatchResults && lastBatchResults.length > 0)) && (
             <div className="rounded-[20px] border border-yellow-500/30 bg-yellow-500/5 p-4">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">
-                  {lastResultsSaved ? 'Latest Saved Results' : 'Unsaved Results'}
+                  Latest Result
                 </h3>
                 <span className="text-[10px] font-black text-yellow-500/70">
                   {(lastBatchResults?.length || 0) + (lastSingleResult ? 1 : 0)}
@@ -586,10 +727,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {lastSingleResult.currency_pair || 'PAIR'} � {lastSingleResult.direction || '�'}
+                          {lastSingleResult.currency_pair || 'PAIR'} ï¿½ {lastSingleResult.direction || 'ï¿½'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : '�'}
+                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : 'ï¿½'}
                         </span>
                       </div>
                       {lastSingleResult.reasoning && (
@@ -599,7 +740,7 @@ const Signals = () => {
                   </div>
                 )}
                 {lastBatchResults && lastBatchResults.length > 0 && lastBatchResults.map((r, i) => (
-                  <div key={`unsaved-${i}`} className="flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-black/40">
+                  <div key={`saved-top-${i}`} className="flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-black/40">
                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
                       {r.direction === 'LONG' ? <FiTrendingUp className="text-green-500" /> :
                         r.direction === 'SHORT' ? <FiTrendingDown className="text-red-500" /> :
@@ -608,10 +749,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {r.currency_pair || 'PAIR'} � {r.direction || '�'}
+                          {r.currency_pair || 'PAIR'} ï¿½ {r.direction || 'ï¿½'}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : '�'}
+                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : 'ï¿½'}
                         </span>
                       </div>
                       {r.reasoning && (
@@ -635,7 +776,7 @@ const Signals = () => {
               </span>
             </div>
 
-            {/* Filter by primary_direction � LONG / SHORT / NEUTRAL from DB */}
+            {/* Filter by primary_direction � LONG / SHORT / NEUTRAL from DB */}
             <div className="flex items-center gap-2">
               <FiFilter size={12} className="text-white-600" />
               <select
@@ -688,7 +829,7 @@ const Signals = () => {
            confidence, primary_sentiment, primary_strength, base_currency, created_at */}
       <AnimatePresence>
         {selectedSignal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-6 md:pt-8">
             <Motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -700,7 +841,7 @@ const Signals = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-4xl bg-transparent z-10 max-h-[90vh] overflow-y-auto custom-scrollbar"
+              className="relative w-full max-w-4xl bg-transparent z-10 max-h-[calc(100vh-2.5rem)] overflow-y-auto custom-scrollbar pr-2"
             >
               <button
                 onClick={() => setSelectedSignal(null)}
@@ -709,16 +850,18 @@ const Signals = () => {
                 <FiX size={16} />
               </button>
 
-              <SignalResult signal={selectedSignal} user={user} />
+              <div className="pt-12 pb-24 px-2 space-y-4">
+                <SignalResult signal={selectedSignal} user={user} />
 
-              <div className="mt-4 px-1">
-                <button
-                  onClick={() => handleDelete(selectedSignal.signal_id)}
-                  className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em]"
-                >
-                  <FiTrash2 className="inline mr-2" size={13} />
-                  Purge Intelligence
-                </button>
+                <div className="px-1">
+                  <button
+                    onClick={() => handleDelete(selectedSignal.signal_id)}
+                    className="w-full py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-[0.2em]"
+                  >
+                    <FiTrash2 className="inline mr-2" size={13} />
+                    Purge Intelligence
+                  </button>
+                </div>
               </div>
             </Motion.div>
           </div>
@@ -730,3 +873,4 @@ const Signals = () => {
 };
 
 export default Signals;
+

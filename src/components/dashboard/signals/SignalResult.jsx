@@ -98,6 +98,16 @@ const SignalResult = ({ signal, user }) => {
     userId: user?.user_id || user?.id,
   };
 
+  const transcriptText =
+    signal.transcript ||
+    signal.raw_transcript ||
+    signal.source_transcript ||
+    signal.source_text ||
+    signal.raw_text ||
+    signal.raw_response?.transcript ||
+    signal.raw_response?.text ||
+    '';
+
   const dir = DIR_CONFIG[data.direction] || DIR_CONFIG.NEUTRAL;
   const DirIcon = dir.icon;
 
@@ -129,12 +139,12 @@ const SignalResult = ({ signal, user }) => {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className={`relative rounded-3xl border bg-gradient-to-br ${dir.gradient} ${dir.border} overflow-hidden shadow-2xl ${dir.glow}`}
+      className={`backdrop-blur-3xl rounded-3xl border bg-gradient-to-br ${dir.gradient} ${dir.border} shadow-2xl ${dir.glow} flex flex-col items-stretch justify-start`}
     >
       {/* Subtle scanline overlay */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.015] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_2px] z-0" />
 
-      <div className="relative z-10 p-6 md:p-8 space-y-6">
+      <div className="relative z-10 p-6 md:p-8 pb-10 space-y-6 flex flex-col">
 
         {/* ── Top row: pair + direction badge + confidence ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -202,13 +212,27 @@ const SignalResult = ({ signal, user }) => {
         </div>
 
         {/* ── Action buttons ── */}
+        {transcriptText && (
+          <div className="rounded-2xl bg-black/30 border border-white/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                Transcript Used
+              </span>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {transcriptText}
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3 pt-2 border-t border-white/5">
           <button
             onClick={handleLearnAboutSignal}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-yellow-500/10"
           >
             <FiMessageCircle size={13} />
-            Ask Mentor
+            Learn about this signal
           </button>
           <button
             onClick={handleGenerateStrategy}

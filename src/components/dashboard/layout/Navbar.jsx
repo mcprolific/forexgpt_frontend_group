@@ -3,7 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../contexts/AuthContext'
 import { motion as Motion } from 'framer-motion'
 
-const GOLD = "#D4AF37";
+const GOLD = "#CA8A04";
 const GOLD_LIGHT = "#FFD700";
 
 const Navbar = ({ isOpen, onMenuClick }) => {

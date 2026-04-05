@@ -9,8 +9,18 @@ const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
-    const rawUser = typeof localStorage !== "undefined" ? localStorage.getItem("user") : null;
+    const token =
+      typeof localStorage !== "undefined" && localStorage.getItem("token")
+        ? localStorage.getItem("token")
+        : typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("token")
+          : null;
+    const rawUser =
+      typeof localStorage !== "undefined" && localStorage.getItem("user")
+        ? localStorage.getItem("user")
+        : typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem("user")
+          : null;
     if (token) {
       try {
         const parsed = rawUser ? JSON.parse(rawUser) : null;
@@ -28,6 +38,10 @@ const useAuth = () => {
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user");
+    }
     dispatch(logoutUser());
     navigate("/login");
   };

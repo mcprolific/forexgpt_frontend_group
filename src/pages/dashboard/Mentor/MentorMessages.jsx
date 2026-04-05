@@ -35,6 +35,29 @@ const STRATEGY_PATTERNS = [
 const detectStrategyType = (text) =>
   STRATEGY_PATTERNS.find(({ regex }) => regex.test(text || ''))?.label ?? null;
 
+const extractStrategyLine = (content) => {
+  if (!content) return '';
+  const withoutCode = content.replace(/```[\s\S]*?```/g, '');
+  const cleaned = withoutCode.replace(/\r/g, '').trim();
+  const lines = cleaned
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const candidate =
+    lines.find(
+      (line) =>
+        line.length <= 200 &&
+        /(strategy|entry|exit|rule|indicator|signal|trade)/i.test(line)
+    ) ||
+    lines.find((line) => line.length <= 200) ||
+    lines[0] ||
+    cleaned;
+
+  const sentence = candidate.split(/(?<=[.?!])\s+/)[0] || candidate;
+  return sentence.trim();
+};
+
 const getDraftKey = (userId) => `fgpt_mentor_draft_${userId || 'anon'}`;
 const getLastConversationKey = (userId) =>
   `fgpt_mentor_last_conversation_${userId || 'anon'}`;
@@ -55,13 +78,13 @@ const MarkdownComponents = {
     <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
   ),
   h1: ({ children }) => (
-    <h1 className="text-base font-black text-white mb-2 mt-4">{children}</h1>
+    <h1 className="text-base font-black text-white mb-4 mt-4">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-sm font-black text-white mb-2 mt-4">{children}</h2>
+    <h2 className="text-sm font-black text-white mb-4 mt-4">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-bold text-yellow-400 mb-1 mt-3">{children}</h3>
+    <h3 className="text-sm font-bold text-yellow-400 mb-2 mt-3">{children}</h3>
   ),
   ul: ({ children }) => (
     <ul className="mb-3 pl-4 space-y-1 list-disc list-outside">{children}</ul>
@@ -71,6 +94,9 @@ const MarkdownComponents = {
   ),
   li: ({ children }) => (
     <li className="leading-relaxed">{children}</li>
+  ),
+  hr: () => (
+    <hr className="my-5 border-0 h-px bg-white/10" />
   ),
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-yellow-500/40 pl-3 my-3 text-gray-400 italic">
@@ -143,6 +169,7 @@ const MentorMessages = () => {
   );
 
   const scrollRef = useRef(null);
+  const inputRef = useRef(null);
   const streamAccumulator = useRef('');
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
@@ -378,9 +405,11 @@ const MentorMessages = () => {
   const handleGenerateCode = (content) => {
     // Build a concise prompt instead of dumping the full response
     const strategyType = detectStrategyType(content) || 'trading';
-    const truncated = content.length > 280
-      ? content.slice(0, 280).replace(/\s+\S*$/, '') + '...'
-      : content;
+    const extractedLine = extractStrategyLine(content);
+    const truncated =
+      extractedLine.length > 220
+        ? extractedLine.slice(0, 220).replace(/\s+\S*$/, '') + '...'
+        : extractedLine;
     const prompt = `Create a ${strategyType} strategy based on: ${truncated}`;
 
     navigate('/dashboard/codegen/session/new', {
@@ -416,6 +445,28 @@ const MentorMessages = () => {
   };
 
   const hasMessages = messages.length > 0 || sending;
+  const mentorSuggestions = [
+    'Explain a simple mean-reversion setup for EUR/USD using RSI.',
+    'Design a trend-following strategy with moving averages and ATR stops.',
+    'How should I size positions with 2% risk per trade?',
+    'Summarize what my backtest metrics say about risk and drawdown.',
+  ];
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!hasMessages) {
+      root.classList.add('no-dashboard-scroll');
+      root.classList.remove('has-dashboard-messages');
+    } else {
+      root.classList.remove('no-dashboard-scroll');
+      root.classList.add('has-dashboard-messages');
+    }
+
+    return () => {
+      root.classList.remove('no-dashboard-scroll');
+      root.classList.remove('has-dashboard-messages');
+    };
+  }, [hasMessages]);
 
   if (loading) {
     return (
@@ -426,7 +477,7 @@ const MentorMessages = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen w-full bg-black/20 backdrop-blur-sm border border-white/5 overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 w-full flex-1 bg-black/20 backdrop-blur-sm border border-white/5 overflow-hidden">
       {/* Header */}
       <div className="bg-white/[0.02] border-b border-white/5 p-5 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -458,8 +509,10 @@ const MentorMessages = () => {
       {/* Messages area — grows; centers content when empty */}
       <div
         ref={scrollRef}
-        className={`flex-1 overflow-y-auto p-6 custom-scrollbar ${
-          !hasMessages ? 'flex flex-col items-center justify-center' : 'space-y-6'
+        className={`flex-1 min-h-0 p-3 custom-scrollbar ${
+          !hasMessages
+            ? 'flex flex-col items-center justify-center overflow-hidden'
+            : 'space-y-3 overflow-y-auto'
         }`}
       >
         {errorMessage && (
@@ -469,11 +522,28 @@ const MentorMessages = () => {
         )}
 
         {!hasMessages ? (
-          <div className="flex flex-col items-center justify-center opacity-20">
-            <FiZap size={48} className="text-yellow-500 mb-4" />
-            <p className="font-black uppercase tracking-[0.3em] text-xs">
-              Awaiting Input Query
-            </p>
+          <div className="flex flex-col items-center justify-center w-full max-w-2xl">
+            <div className="flex flex-col items-center justify-center opacity-30">
+              <FiZap size={48} className="text-yellow-500 mb-4" />
+              <p className="font-black uppercase tracking-[0.3em] text-xs">
+                Awaiting Input Query
+              </p>
+            </div>
+            <div className="mt-6 w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {mentorSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setNewMessage(suggestion);
+                    inputRef.current?.focus();
+                  }}
+                  className="text-left px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-gray-400 hover:text-white hover:border-yellow-500/30 transition-all"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="space-y-6 w-full">
@@ -501,7 +571,7 @@ const MentorMessages = () => {
                   <div
                     className={`max-w-[85%] rounded-2xl p-4 transition-all ${
                       message.role === 'user'
-                        ? 'bg-blue-600 text-white font-bold shadow-lg shadow-black/20'
+                        ? 'bg-yellow-600 text-black font-bold shadow-lg shadow-black/20'
                         : 'bg-white/[0.03] border border-white/5 text-gray-200'
                     }`}
                   >
@@ -545,7 +615,7 @@ const MentorMessages = () => {
 
                     <div
                       className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                        message.role === 'user' ? 'text-[#F5E9C8]/40' : 'text-gray-600'
+                        message.role === 'user' ? 'text-white/70' : 'text-gray-600'
                       }`}
                     >
                       <span>{formatLongDateTime(message.timestamp)}</span>
@@ -607,7 +677,7 @@ const MentorMessages = () => {
       </div>
 
       {/* Input — at bottom when messages exist, centered when empty */}
-      <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'flex-1 flex items-center justify-center p-6'}`}>
+      <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0'}`}>
         <div className="relative group w-full max-w-2xl">
           <input
             type="text"
@@ -615,6 +685,7 @@ const MentorMessages = () => {
             onChange={(e) => setNewMessage(e.target.value)}
             disabled={sending}
             placeholder="Input market analysis query..."
+            ref={inputRef}
             className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
           />

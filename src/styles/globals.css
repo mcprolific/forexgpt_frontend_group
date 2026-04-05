@@ -21,6 +21,22 @@ html, body, #root {
   --fgpt-star: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><circle cx='1' cy='1' r='1' fill='rgba(255,255,255,0.12)'/><circle cx='13' cy='13' r='1' fill='rgba(255,255,255,0.08)'/></svg>");
 }
 
+:root.light {
+  --fgpt-bg: #f4f1ea;
+  --fgpt-fg: #1a1a1a;
+  --fgpt-dot: rgba(0, 0, 0, 0.08);
+  --fgpt-mesh-emerald: radial-gradient(60rem 30rem at 8% 18%, rgba(212,175,55,0.08), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(255,215,0,0.06), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(16,185,129,0.06), transparent 64%);
+  --fgpt-mesh-violet:  radial-gradient(60rem 30rem at 8% 18%, rgba(168,85,247,0.08), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(244,114,182,0.06), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(139,92,246,0.06), transparent 64%);
+  --fgpt-mesh-sky:     radial-gradient(60rem 30rem at 8% 18%, rgba(14,165,233,0.08), transparent 62%),
+                       radial-gradient(42rem 22rem at 88% 28%, rgba(34,211,238,0.06), transparent 64%),
+                       radial-gradient(50rem 26rem at 50% 86%, rgba(56,189,248,0.06), transparent 64%);
+  --fgpt-star: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><circle cx='1' cy='1' r='1' fill='rgba(0,0,0,0.12)'/><circle cx='13' cy='13' r='1' fill='rgba(0,0,0,0.08)'/></svg>");
+}
+
 body {
   background-color: var(--fgpt-bg);
   color: var(--fgpt-fg);
@@ -32,6 +48,12 @@ body {
     var(--fgpt-dot-size) var(--fgpt-dot-size);
   background-repeat: no-repeat, repeat;
   background-attachment: fixed, fixed;
+}
+
+:root.light body {
+  background-image:
+    radial-gradient(1200px 600px at 20% 0%, rgba(16,185,129,0.06), transparent 60%),
+    var(--fgpt-star);
 }
 
 /* Make semantic interactive controls feel clickable by default. */
