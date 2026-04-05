@@ -15,9 +15,11 @@ const BASE_URL =
  * @param {function} opts.onChunk         - Called with each text chunk (string)
  * @param {function} opts.onDone          - Called when the stream finishes
  * @param {function} opts.onError         - Called with an Error on failure
+ * @param {function} [opts.onConversationId] - Called when a conversation id is discovered
  */
-export async function streamMentorResponse({ question, conversationId, onChunk, onDone, onError }) {
-  const token = localStorage.getItem("token");
+export async function streamMentorResponse({ question, conversationId, userId, onChunk, onDone, onError, onConversationId }) {
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
   const headers = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -27,6 +29,7 @@ export async function streamMentorResponse({ question, conversationId, onChunk, 
   const body = JSON.stringify({
     message: question,
     ...(conversationId ? { conversation_id: conversationId } : {}),
+    ...(userId ? { user_id: userId } : {}),
   });
 
   try {
@@ -36,15 +39,30 @@ export async function streamMentorResponse({ question, conversationId, onChunk, 
       body,
     });
 
+    const headerConversationId =
+      response.headers.get("x-conversation-id") ||
+      response.headers.get("conversation-id") ||
+      null;
+    if (headerConversationId && onConversationId) {
+      onConversationId(headerConversationId);
+    }
+
     // --- Fallback: streaming endpoint not yet deployed ---
     if (response.status === 404 || !response.body) {
       const fallback = await fetch(`${BASE_URL}/mentor/conversations`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ message: question }),
+        body: JSON.stringify({
+          message: question,
+          ...(conversationId ? { conversation_id: conversationId } : {}),
+          ...(userId ? { user_id: userId } : {}),
+        }),
       });
       if (!fallback.ok) throw new Error(`Mentor API error: ${fallback.status}`);
       const data = await fallback.json();
+      if (data?.conversation_id && onConversationId) {
+        onConversationId(data.conversation_id);
+      }
       onChunk(data?.response || data?.answer || "Ok.");
       onDone();
       return;
@@ -87,10 +105,14 @@ export async function streamMentorResponse({ question, conversationId, onChunk, 
             } else if (parsed?.error) {
               throw new Error(parsed.error);
             } else {
+              if (parsed?.conversation_id && onConversationId) {
+                onConversationId(parsed.conversation_id);
+              }
               // OpenAI-compatible SSE fallback
               const chunk =
                 parsed?.choices?.[0]?.delta?.content ??
                 parsed?.chunk ??
+                parsed?.content ??
                 parsed?.text ??
                 "";
               if (chunk) onChunk(chunk);

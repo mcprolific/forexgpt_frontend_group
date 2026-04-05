@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   FiSend,
   FiThumbsUp,
@@ -15,69 +15,80 @@ import {
   FiAlertCircle,
   FiChevronDown,
   FiChevronUp,
-} from 'react-icons/fi';
-import { motion as Motion } from 'framer-motion';
-import { useSelector } from 'react-redux';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+} from "react-icons/fi";
+import { motion as Motion } from "framer-motion";
+import { useSelector } from "react-redux";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import {
   getCodeConversationHistory,
   generateCode as askArchitect,
-  // FIX: Moved improveStrategy to top-level import — no longer dynamically imported
   improveStrategy,
-} from '../../../services/codeGenService';
+  getCodeGenHistoryCacheKey,
+  getConversations,
+  updateGeneratedCode,
+} from "../../../services/codeGenService";
+import { formatLongDateTime } from "../../../utils/formatters";
 
 const sanitizeFileName = (value) =>
-  (value || 'strategy')
+  (value || "strategy")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50) || 'strategy';
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50) || "strategy";
 
 const formatSummaryPercent = (value) =>
-  value != null && value !== ''
-    ? `${Number(value).toFixed(2)}%`
-    : 'N/A';
+  value != null && value !== "" ? `${Number(value).toFixed(2)}%` : "N/A";
 
 const formatSummaryMetric = (value, decimals = 2) =>
-  value != null && value !== ''
-    ? Number(value).toFixed(decimals)
-    : 'N/A';
+  value != null && value !== "" ? Number(value).toFixed(decimals) : "N/A";
+
+const getDraftKey = (userId) => `fgpt_codegen_draft_${userId || "anon"}`;
+const getLastConversationKey = (userId) =>
+  `fgpt_codegen_last_conversation_${userId || "anon"}`;
+
+const parseStoredMessages = (raw) => {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 const CodeGeneration = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // ── Improvement mode state ─────────────────────────────────
   const [improvementMode, setImprovementMode] = useState(false);
   const [originalCode, setOriginalCode] = useState(null);
   const [backtestResults, setBacktestResults] = useState(null);
   const [mentorAnalysis, setMentorAnalysis] = useState(null);
-  const [additionalRequirements, setAdditionalRequirements] = useState('');
+  const [additionalRequirements, setAdditionalRequirements] = useState("");
   const [showOriginalCode, setShowOriginalCode] = useState(false);
   const [showBacktestSummary, setShowBacktestSummary] = useState(true);
 
-  // ── Latest generated code (for Test Strategy button) ──────
-  const [latestStrategyDesc, setLatestStrategyDesc] = useState('');
-  const [latestGeneratedCode, setLatestGeneratedCode] = useState(null);
-
-  // ── Copy feedback state ────────────────────────────────────
+  const [latestStrategyDesc, setLatestStrategyDesc] = useState("");
   const [copiedId, setCopiedId] = useState(null);
 
   const scrollRef = useRef(null);
+  const inputRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
+  const userId = user?.user_id || user?.id;
 
-  // ── Handle incoming navigation state ──────────────────────
   useEffect(() => {
     const state = location.state || {};
+    if (!Object.keys(state).length) return;
 
     if (state.fromMentor) {
       const strategyType = state.strategyType || '';
@@ -93,60 +104,102 @@ const CodeGeneration = () => {
       }
     }
 
+<<<<<<< HEAD
+    if (state.prefilledDescription) {
+=======
     if (state.fromSignals && state.prefilledDescription) {
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
       setNewMessage(state.prefilledDescription);
     }
 
-    if (state.mode === 'improve') {
+    if (state.mode === "improve") {
       setImprovementMode(true);
       setOriginalCode(state.originalCode || null);
       setBacktestResults(state.backtestResults || null);
       setMentorAnalysis(state.mentorAnalysis || null);
     }
-  }, [location.state]);
 
-  // ── Fetch conversation history ─────────────────────────────
+    // Clear consumed state so a page re-render doesn't re-trigger this effect
+    navigate(location.pathname, { replace: true, state: null });
+  }, []);
+
   useEffect(() => {
     const fetchHistory = async () => {
-      if (conversationId === 'new') {
+      if (!conversationId || !userId) {
+        setMessages([]);
         setLoading(false);
         return;
       }
+
+      if (conversationId === "new") {
+        setMessages(parseStoredMessages(localStorage.getItem(getDraftKey(userId))));
+        setLoading(false);
+        return;
+      }
+
       if (location.state?.skipFetch) {
         setLoading(false);
         return;
       }
-      if (!conversationId || !user?.id) {
-        setLoading(false);
-        return;
-      }
-      // If we already have messages in state, avoid flashing the spinner again.
-      if (messages.length) setLoading(false);
+
+      const cacheKey = getCodeGenHistoryCacheKey(conversationId);
+      const cachedHistory = parseStoredMessages(localStorage.getItem(cacheKey));
+
       try {
-        setErrorMessage('');
-        const res = await getCodeConversationHistory(conversationId, user.id);
-        const history = Array.isArray(res?.history) ? res.history : [];
-        if (history.length) {
-          setMessages((prev) => (prev.length ? prev : history));
-        }
+        setErrorMessage("");
+        const res = await getCodeConversationHistory(conversationId, userId);
+        const history = Array.isArray(res.history) ? res.history : [];
+        const nextHistory = history.length > 0 ? history : cachedHistory;
+        setMessages(nextHistory);
+        localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
       } catch (error) {
-        console.error('Error fetching logic history:', error);
-        setErrorMessage('Failed to load conversation. Please try again.');
+        console.error("Error fetching logic history:", error);
+        if (cachedHistory.length > 0) {
+          setMessages(cachedHistory);
+        }
+        setErrorMessage("Failed to load conversation. Please try again.");
       } finally {
         setLoading(false);
       }
     };
-    fetchHistory();
-  }, [conversationId, user?.id, location.state, messages.length]);
 
-  // ── Auto scroll ────────────────────────────────────────────
+    fetchHistory();
+  }, [conversationId, userId, location.state]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const draftKey = getDraftKey(userId);
+
+    if (conversationId === "new") {
+      localStorage.setItem(draftKey, JSON.stringify(messages));
+      return;
+    }
+
+    localStorage.removeItem(draftKey);
+
+    if (conversationId) {
+      localStorage.setItem(
+        getCodeGenHistoryCacheKey(conversationId),
+        JSON.stringify(messages)
+      );
+    }
+  }, [conversationId, messages, userId]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // ── Copy to clipboard with feedback ───────────────────────
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${next}px`;
+  }, [newMessage]);
+
   const handleCopy = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -156,9 +209,9 @@ const CodeGeneration = () => {
   const handleDownloadCode = (code, fileNameHint = latestStrategyDesc) => {
     if (!code) return;
 
-    const blob = new Blob([code], { type: 'text/x-python' });
+    const blob = new Blob([code], { type: "text/x-python" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
 
     link.href = url;
     link.download = `${sanitizeFileName(fileNameHint)}.py`;
@@ -168,75 +221,119 @@ const CodeGeneration = () => {
     URL.revokeObjectURL(url);
   };
 
-  // ── Send message (initial generation) ─────────────────────
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending || !user?.id) return;
+    if (!newMessage.trim() || sending || !userId) return;
 
     const userContent = newMessage;
-    setNewMessage('');
+    setNewMessage("");
     setSending(true);
+    setErrorMessage("");
     setLatestStrategyDesc(userContent);
 
     const userMsg = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: userContent,
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, userMsg]);
+
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+
+      if (conversationId === "new") {
+        localStorage.setItem(getDraftKey(userId), JSON.stringify(next));
+      } else if (conversationId) {
+        localStorage.setItem(
+          getCodeGenHistoryCacheKey(conversationId),
+          JSON.stringify(next)
+        );
+      }
+
+      return next;
+    });
 
     try {
       const response = await askArchitect(
         userContent,
-        conversationId === 'new' ? null : conversationId,
-        user.id
+        conversationId === "new" ? null : conversationId,
+        userId
       );
 
       if (response && response.conversation_id) {
         const assistantMsg = {
-          id: response.code_id || Date.now().toString() + '-assistant',
-          role: 'assistant',
+          id: response.code_id || `${Date.now()}-assistant`,
+          role: "assistant",
           content: response.explanation,
-          // FIX: Safely fallback if code is missing
           code: response.code || null,
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
+<<<<<<< HEAD
+          // Always append the assistant reply first so the user sees it,
+          // then update the URL if this was a brand-new conversation.
+          setMessages((prev) => [...prev, assistantMsg]);
+          if (assistantMsg.code) {
+            setLatestGeneratedCode(assistantMsg.code);
+          }
+=======
         // Always append the assistant reply first so the user sees it,
         // then update the URL if this was a brand-new conversation.
         setMessages((prev) => [...prev, assistantMsg]);
+>>>>>>> c67ada9156c0428cb612866da019267b08460d66
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
             state: { skipFetch: true },
           });
+        } else if (conversationId && userId) {
+          localStorage.setItem(getLastConversationKey(userId), conversationId);
+        }
+
+        if (userId && response.conversation_id) {
+          try {
+            const latest = await getConversations(userId);
+            const exists = (latest || []).some(
+              (item) => item?.conversation_id === response.conversation_id
+            );
+            if (!exists && response.code_id) {
+              await updateGeneratedCode(response.code_id, userId, {
+                conversation_id: response.conversation_id,
+                description: userContent,
+              });
+              await getConversations(userId);
+            }
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("fgpt-codegen-history-updated"));
+            }
+          } catch (error) {
+            console.error("Failed to persist codegen history:", error);
+          }
         }
       } else {
-        // Response came back but was missing expected fields
-        setErrorMessage('The server returned an unexpected response.');
+        setErrorMessage("The server returned an unexpected response.");
         setMessages((prev) => [
           ...prev,
           {
-            id: Date.now().toString() + '-error',
-            role: 'assistant',
-            content: 'The server returned an unexpected response. Please try again.',
+            id: `${Date.now()}-error`,
+            role: "assistant",
+            content: "The server returned an unexpected response. Please try again.",
             timestamp: new Date().toISOString(),
           },
         ]);
       }
     } catch (error) {
-      console.error('Error generating logic:', error);
+      console.error("Error generating logic:", error);
       const errMsg =
         error?.response?.data?.message ||
         error?.message ||
-        'Failed to generate code. Please try again.';
+        "Failed to generate code. Please try again.";
       setErrorMessage(errMsg);
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString() + '-error',
-          role: 'assistant',
+          id: `${Date.now()}-error`,
+          role: "assistant",
           content: `Error: ${errMsg}`,
           timestamp: new Date().toISOString(),
         },
@@ -246,37 +343,35 @@ const CodeGeneration = () => {
     }
   };
 
-  // ── Improvement generation ─────────────────────────────────
   const handleImproveStrategy = async () => {
-    if (sending || !user?.id || !originalCode) return;
+    if (sending || !userId || !originalCode) return;
 
     setSending(true);
+    setErrorMessage("");
 
     const userMsg = {
       id: Date.now().toString(),
-      role: 'user',
-      content: `Improving strategy${additionalRequirements ? ` with additional requirements: ${additionalRequirements}` : ''}...`,
+      role: "user",
+      content: `Improving strategy${additionalRequirements ? ` with additional requirements: ${additionalRequirements}` : ""}...`,
       timestamp: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMsg]);
 
     try {
-      // FIX: No longer dynamically imported — uses top-level import directly
       const response = await improveStrategy(
-        user.id,
+        userId,
         originalCode,
         backtestResults || {},
-        mentorAnalysis || '',
+        mentorAnalysis || "",
         additionalRequirements,
-        conversationId === 'new' ? null : conversationId
+        conversationId === "new" ? null : conversationId
       );
 
       if (response) {
         const assistantMsg = {
-          id: response.code_id || Date.now().toString() + '-improved',
-          role: 'assistant',
+          id: response.code_id || `${Date.now()}-improved`,
+          role: "assistant",
           content: response.explanation,
-          // FIX: Safely fallback if code is missing
           code: response.code || null,
           timestamp: response.timestamp || new Date().toISOString(),
           isImproved: true,
@@ -284,53 +379,69 @@ const CodeGeneration = () => {
 
         setImprovementMode(false);
 
-        // FIX: Always add assistant message before navigating
-        setMessages((prev) => [...prev, assistantMsg]);
-        if (assistantMsg.code) {
-          setLatestGeneratedCode(assistantMsg.code);
-        }
+        setMessages((prev) => {
+          const next = [...prev, assistantMsg];
+          const targetConversationId =
+            conversationId === "new" ? response.conversation_id : conversationId;
 
-        if (conversationId === 'new' && response.conversation_id) {
+          if (targetConversationId) {
+            localStorage.setItem(
+              getCodeGenHistoryCacheKey(targetConversationId),
+              JSON.stringify(next)
+            );
+          }
+
+          return next;
+        });
+
+        if (conversationId === "new" && response.conversation_id) {
+          localStorage.removeItem(getDraftKey(userId));
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {
             replace: true,
+            state: { skipFetch: true },
           });
         }
       }
     } catch (error) {
-      console.error('Error improving strategy:', error);
-      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      console.error("Error improving strategy:", error);
+      setErrorMessage("Failed to improve strategy. Please try again.");
+      setMessages((prev) => prev.filter((message) => message.id !== userMsg.id));
     } finally {
       setSending(false);
     }
   };
 
-  // ── Navigate to Backtest with generated code ───────────────
   const handleTestStrategy = (code, version = 1) => {
-    // FIX: Guard against missing code before navigating
     if (!code) {
-      console.error('No code available to test');
+      console.error("No code available to test");
       return;
     }
-    navigate('/dashboard/backtest/new', {
+
+    navigate("/dashboard/backtest/new", {
       state: {
-        mode: 'custom',
+        mode: "custom",
         customCode: code,
-        strategyName: latestStrategyDesc.substring(0, 50) || 'Custom Strategy',
-        strategyType: 'custom',
+        strategyName: latestStrategyDesc.substring(0, 50) || "Custom Strategy",
+        strategyType: "custom",
         version,
-        source: 'codegen',
+        source: "codegen",
       },
     });
   };
 
-  // ── Render message content ─────────────────────────────────
-  const renderContent = (content, code, isImproved = false, messageId, role) => (
+  const renderContent = (
+    content,
+    code,
+    isImproved = false,
+    messageId,
+    role = "assistant"
+  ) => (
     <div className="space-y-4">
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
           components={{
             code({ node, inline, className, children, ...props }) {
-              const match = /language-(\w+)/.exec(className || '');
+              const match = /language-(\w+)/.exec(className || "");
               return !inline && match ? (
                 <div className="rounded-lg overflow-hidden my-4 border border-white/10">
                   <SyntaxHighlighter
@@ -339,7 +450,7 @@ const CodeGeneration = () => {
                     PreTag="div"
                     {...props}
                   >
-                    {String(children).replace(/\n$/, '')}
+                    {String(children).replace(/\n$/, "")}
                   </SyntaxHighlighter>
                 </div>
               ) : (
@@ -357,7 +468,6 @@ const CodeGeneration = () => {
         </ReactMarkdown>
       </div>
 
-      {/* Code block — only render if code exists */}
       {code && (
         <div className="rounded-xl overflow-hidden bg-[#0d0d0d] border border-white/10 group shadow-2xl">
           <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center justify-between">
@@ -365,7 +475,7 @@ const CodeGeneration = () => {
               <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                 <FiCode size={12} className="text-yellow-500" />
-                {isImproved ? 'Improved Strategy v2' : 'Neural Strategy Executable'}
+                {isImproved ? "Improved Strategy v2" : "Neural Strategy Executable"}
               </span>
             </div>
             <button
@@ -374,7 +484,7 @@ const CodeGeneration = () => {
             >
               <FiCopy size={12} />
               <span className="text-[8px] font-black uppercase tracking-tighter">
-                {copiedId === `copy-${messageId}` ? 'Copied!' : 'Copy'}
+                {copiedId === `copy-${messageId}` ? "Copied!" : "Copy"}
               </span>
             </button>
           </div>
@@ -383,18 +493,17 @@ const CodeGeneration = () => {
             style={atomDark}
             customStyle={{
               margin: 0,
-              padding: '1.5rem',
-              fontSize: '0.8rem',
-              backgroundColor: 'transparent',
-              fontFamily: 'JetBrains Mono, Menlo, monospace',
+              padding: "1.5rem",
+              fontSize: "0.8rem",
+              backgroundColor: "transparent",
+              fontFamily: "JetBrains Mono, Menlo, monospace",
             }}
             showLineNumbers
-            lineNumberStyle={{ color: '#ffffff20', minWidth: '2.5em' }}
+            lineNumberStyle={{ color: "#ffffff20", minWidth: "2.5em" }}
           >
             {code}
           </SyntaxHighlighter>
 
-          {/* Test Strategy button */}
           <div className="px-4 py-3 bg-white/5 border-t border-white/5 flex gap-2">
             <button
               onClick={() => handleTestStrategy(code, isImproved ? 2 : 1)}
@@ -402,10 +511,12 @@ const CodeGeneration = () => {
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FiPlay size={12} />
-              {isImproved ? 'Test Improved Strategy' : 'Test Strategy'}
+              {isImproved ? "Test Improved Strategy" : "Test Strategy"}
             </button>
             <button
-              onClick={() => handleDownloadCode(code, latestStrategyDesc || `strategy-${messageId}`)}
+              onClick={() =>
+                handleDownloadCode(code, latestStrategyDesc || `strategy-${messageId}`)
+              }
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 text-gray-300 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
             >
               <FiDownload size={12} />
@@ -415,8 +526,7 @@ const CodeGeneration = () => {
         </div>
       )}
 
-      {/* FIX: Show warning if assistant responded but no code was returned */}
-      {!code && content && role === 'assistant' && (
+      {role === "assistant" && !code && content && (
         <div className="flex items-center gap-2 text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-2">
           <FiAlertCircle size={12} />
           No code was returned for this response.
@@ -424,6 +534,30 @@ const CodeGeneration = () => {
       )}
     </div>
   );
+
+  const codegenSuggestions = [
+    "Generate a momentum strategy using RSI and MACD for GBP/USD.",
+    "Build a mean-reversion strategy with Bollinger Bands and RSI filters.",
+    "Create a breakout strategy using ATR stops and volume confirmation.",
+    "Write a scalping strategy for the London session with tight risk.",
+  ];
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const shouldLock = messages.length === 0 && !improvementMode;
+    if (shouldLock) {
+      root.classList.add("no-dashboard-scroll");
+      root.classList.remove("has-dashboard-messages");
+    } else {
+      root.classList.remove("no-dashboard-scroll");
+      root.classList.add("has-dashboard-messages");
+    }
+
+    return () => {
+      root.classList.remove("no-dashboard-scroll");
+      root.classList.remove("has-dashboard-messages");
+    };
+  }, [messages.length, improvementMode]);
 
   if (loading) {
     return (
@@ -434,10 +568,8 @@ const CodeGeneration = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
-
-      {/* Header */}
-      <div className="bg-white/[0.02] border-b border-white/5 p-5">
+    <div className="flex flex-col h-full min-h-0 flex-1 bg-black/20 backdrop-blur-sm rounded-3xl border border-white/5 overflow-hidden">
+      <div className="bg-white/[0.02] border-b border-white/5 p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500">
@@ -445,13 +577,15 @@ const CodeGeneration = () => {
             </div>
             <div>
               <h2 className="text-sm font-black text-white uppercase tracking-widest">
-                {improvementMode ? 'Strategy Improvement Mode' : 'Logic Intelligence'}
+                {improvementMode ? "Strategy Improvement Mode" : "Logic Intelligence"}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${improvementMode ? 'bg-orange-500' : 'bg-green-500'}`} />
+                <div
+                  className={`h-1.5 w-1.5 rounded-full animate-pulse ${improvementMode ? "bg-orange-500" : "bg-green-500"}`}
+                />
                 <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">
                   {improvementMode
-                    ? 'Improvement Mode Active • Backtest Context Loaded'
+                    ? "Improvement Mode Active • Backtest Context Loaded"
                     : `AI Node Active • ${messages.length} Exchanges`}
                 </span>
               </div>
@@ -463,14 +597,13 @@ const CodeGeneration = () => {
         </div>
       </div>
 
-      {/* Improvement Mode Banner */}
       {improvementMode && (
         <div className="mx-4 mt-4 rounded-xl border border-orange-500/30 bg-orange-500/10 overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FiTool className="text-orange-400" size={14} />
               <span className="text-[11px] font-black text-orange-400 uppercase tracking-widest">
-                Improvement Mode — Backtest Context Loaded
+                Improvement Mode • Backtest Context Loaded
               </span>
             </div>
             <button
@@ -488,33 +621,35 @@ const CodeGeneration = () => {
               </p>
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: 'Sharpe', value: formatSummaryMetric(backtestResults.sharpe_ratio) },
+                  { label: "Sharpe", value: formatSummaryMetric(backtestResults.sharpe_ratio) },
                   {
-                    label: 'Max DD',
+                    label: "Max DD",
                     value: formatSummaryPercent(
                       backtestResults.max_drawdown ?? backtestResults.max_drawdown_pct
                     ),
                   },
                   {
-                    label: 'Win Rate',
+                    label: "Win Rate",
                     value: formatSummaryPercent(
                       backtestResults.win_rate ?? backtestResults.win_rate_pct
                     ),
                   },
                   {
-                    label: 'Return',
+                    label: "Return",
                     value: formatSummaryPercent(
                       backtestResults.total_return ?? backtestResults.total_return_pct
                     ),
                   },
                   {
-                    label: 'Expectancy',
+                    label: "Expectancy",
                     value: formatSummaryMetric(backtestResults.expectancy, 4),
                   },
-                ].map((m) => (
-                  <div key={m.label} className="bg-black/30 rounded-lg p-2 text-center">
-                    <p className="text-[9px] text-gray-600 uppercase tracking-widest">{m.label}</p>
-                    <p className="text-sm font-black text-orange-400">{m.value}</p>
+                ].map((metric) => (
+                  <div key={metric.label} className="bg-black/30 rounded-lg p-2 text-center">
+                    <p className="text-[9px] text-gray-600 uppercase tracking-widest">
+                      {metric.label}
+                    </p>
+                    <p className="text-sm font-black text-orange-400">{metric.value}</p>
                   </div>
                 ))}
               </div>
@@ -537,16 +672,21 @@ const CodeGeneration = () => {
                     className="text-[10px] text-gray-500 hover:text-yellow-500 uppercase tracking-widest font-bold flex items-center gap-1"
                   >
                     {showOriginalCode ? <FiChevronUp size={10} /> : <FiChevronDown size={10} />}
-                    {showOriginalCode ? 'Hide Original Code' : 'Show Original Code'}
+                    {showOriginalCode ? "Hide Original Code" : "Show Original Code"}
                   </button>
                   {showOriginalCode && (
                     <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
                       <SyntaxHighlighter
                         language="python"
                         style={atomDark}
-                        customStyle={{ margin: 0, padding: '1rem', fontSize: '0.75rem', backgroundColor: 'transparent' }}
+                        customStyle={{
+                          margin: 0,
+                          padding: "1rem",
+                          fontSize: "0.75rem",
+                          backgroundColor: "transparent",
+                        }}
                         showLineNumbers
-                        lineNumberStyle={{ color: '#ffffff20' }}
+                        lineNumberStyle={{ color: "#ffffff20" }}
                       >
                         {originalCode}
                       </SyntaxHighlighter>
@@ -559,17 +699,38 @@ const CodeGeneration = () => {
         </div>
       )}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+      <div
+        ref={scrollRef}
+        className={`flex-1 min-h-0 p-6 custom-scrollbar ${
+          messages.length === 0 && !improvementMode ? 'overflow-hidden' : 'overflow-y-auto space-y-6'
+        }`}
+      >
         {errorMessage && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold px-4 py-3">
             {errorMessage}
           </div>
         )}
         {messages.length === 0 && !improvementMode ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-20">
-            <FiCode size={48} className="text-yellow-500 mb-4" />
-            <p className="font-black uppercase tracking-[0.3em] text-xs">Awaiting Logic Query</p>
+          <div className="h-full flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center justify-center opacity-30">
+              <FiCode size={48} className="text-yellow-500 mb-4" />
+              <p className="font-black uppercase tracking-[0.3em] text-xs">Awaiting Logic Query</p>
+            </div>
+            <div className="mt-6 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {codegenSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setNewMessage(suggestion);
+                    inputRef.current?.focus();
+                  }}
+                  className="text-left px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-gray-400 hover:text-white hover:border-yellow-500/30 transition-all"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           messages.map((message, idx) => (
@@ -577,37 +738,45 @@ const CodeGeneration = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               key={message.id || idx}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start w-full"}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl p-4 transition-all
-                  ${message.role === 'user'
-                    ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/10'
-                    : 'bg-white/[0.03] border border-white/5 text-gray-200'}`}
+                className={`rounded-2xl p-4 transition-all ${
+                  message.role === "user"
+                    ? "max-w-[85%] bg-yellow-600 text-black font-bold shadow-lg shadow-black/20"
+                    : "w-full bg-white/[0.03] border border-white/5 text-gray-200"
+                }`}
               >
-                {message.role === 'assistant' && (
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                {message.role === "assistant" && (
+                  <div className="flex items-center gap-2 mb-3">
                     <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
-                      {message.isImproved ? '🔧 IMPROVED STRATEGY' : 'AI LOGIC'}
+                      {message.isImproved ? "IMPROVED STRATEGY" : "AI LOGIC"}
                     </span>
                   </div>
                 )}
 
-                {renderContent(message.content, message.code, message.isImproved, message.id || idx, message.role)}
+                {renderContent(
+                  message.content,
+                  message.code,
+                  message.isImproved,
+                  message.id || idx,
+                  message.role
+                )}
 
                 <div
-                  className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter
-                    ${message.role === 'user' ? 'text-black/40' : 'text-gray-600'}`}
+                  className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
+                    message.role === "user" ? "text-white/75" : "text-gray-600"
+                  }`}
                 >
-                  <span>
-                    {message.timestamp
-                      ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : ''}
-                  </span>
-                  {message.role === 'assistant' && (
+                  <span>{formatLongDateTime(message.timestamp)}</span>
+                  {message.role === "assistant" && (
                     <div className="flex items-center gap-2">
-                      <button className="hover:text-yellow-500"><FiThumbsUp /></button>
-                      <button className="hover:text-yellow-500"><FiThumbsDown /></button>
+                      <button className="hover:text-yellow-500">
+                        <FiThumbsUp />
+                      </button>
+                      <button className="hover:text-yellow-500">
+                        <FiThumbsDown />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -627,10 +796,7 @@ const CodeGeneration = () => {
         )}
       </div>
 
-      {/* Input area */}
       <div className="p-6 bg-white/[0.02] border-t border-white/5 space-y-3">
-
-        {/* Improvement mode — additional requirements */}
         {improvementMode && (
           <div className="space-y-2">
             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
@@ -649,22 +815,27 @@ const CodeGeneration = () => {
               className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-orange-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FiTool size={14} />
-              {sending ? 'Generating Improved Strategy...' : 'Generate Improved Strategy'}
+              {sending ? "Generating Improved Strategy..." : "Generate Improved Strategy"}
             </button>
           </div>
         )}
 
-        {/* Standard input */}
         {!improvementMode && (
           <div className="relative group">
-            <input
-              type="text"
+            <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               disabled={sending}
               placeholder="Input neural logic query..."
-              className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50"
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+              ref={inputRef}
+              rows={1}
+              className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50 resize-none overflow-y-auto"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
             />
             <button
               onClick={handleSendMessage}

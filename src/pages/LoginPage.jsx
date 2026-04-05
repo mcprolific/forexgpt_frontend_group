@@ -15,6 +15,7 @@ import axiosInstance from "../services/axiosInstance";
 import { useTheme } from "../contexts/ThemeContext";
 import Logo from "../assets/logo.png";
 import LoadingScreen from "../components/ui/LoadingScreen";
+import { forgotPasswordAPI } from "../features/auth/authAPI";
 
 const LoginPage = () => {
   const dispatch = useDispatch();
@@ -32,10 +33,20 @@ const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState("");
+  const [forgotStatusType, setForgotStatusType] = useState("info");
   const [capsPassword, setCapsPassword] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [lastAuthError, setLastAuthError] = useState("");
+
+  const closeForgotModal = () => {
+    setForgotOpen(false);
+    setForgotEmail("");
+    setForgotStatus("");
+    setForgotStatusType("info");
+  };
 
   const validEmail = useMemo(
     () => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email),
@@ -65,13 +76,12 @@ const LoginPage = () => {
     if (e.email || e.password) return;
 
       try {
-        const result = await dispatch(login({ email, password })).unwrap();
+        const result = await dispatch(login({ email, password, rememberMe })).unwrap();
         if (!result?.token) {
           setFormError("Invalid login details. Please check your email and password and try again.");
           show("Invalid login details. Please try again.", "error");
           return;
         }
-        show("Authorization successful. Opening terminal...", "success");
         if (rememberMe) {
           localStorage.setItem("fgpt_login_email", email);
           localStorage.setItem("fgpt_remember_me", "true");
@@ -79,7 +89,15 @@ const LoginPage = () => {
         localStorage.removeItem("fgpt_login_email");
         localStorage.removeItem("fgpt_remember_me");
       }
-      navigate("/dashboard");
+      navigate("/dashboard", {
+        state: {
+          toast: {
+            message: "Authorization successful. Welcome back.",
+            type: "success",
+            duration: 4500,
+          },
+        },
+      });
       } catch (err) {
         const msg = err?.message || err?.toString() || "";
         if (/verify|confirm/i.test(msg) || /unverified/i.test(msg) || /email/i.test(msg) && /confirm/i.test(msg)) {
@@ -139,8 +157,15 @@ const LoginPage = () => {
           }
           setTimeout(() => {
             setOauthHandled(true);
-            show("Logged in with OAuth", "success");
-            navigate("/dashboard");
+            navigate("/dashboard", {
+              state: {
+                toast: {
+                  message: "Logged in with Google successfully.",
+                  type: "success",
+                  duration: 4500,
+                },
+              },
+            });
           }, 0);
         }
       }
@@ -314,18 +339,9 @@ const LoginPage = () => {
 
                 {/* Password */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-[10px] font-bold uppercase tracking-widest" style={{ color: isLight ? '#374151' : '#6b7280' }}>
-                      Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setForgotOpen(true)}
-                      className="text-[10px] font-bold text-[#D4AF37] hover:text-[#FFD700] transition-colors"
-                    >
-                      Forgot?
-                    </button>
-                  </div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isLight ? '#374151' : '#6b7280' }}>
+                    Password
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: isLight ? '#9ca3af' : '#4b5563' }}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -356,6 +372,13 @@ const LoginPage = () => {
                       {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setForgotOpen(true)}
+                    className="mt-2 text-[10px] font-bold text-[#D4AF37] hover:text-[#FFD700] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
                   {errors.password && <p className="mt-1 text-[10px] text-red-400">{errors.password}</p>}
                   {capsPassword && (
                     <p className="mt-1 text-[10px] text-amber-500 font-bold uppercase tracking-tight">Caps Lock is ON</p>
@@ -395,7 +418,7 @@ const LoginPage = () => {
               {formError && /verify|confirm|unverified/i.test(formError) && (
                 <div className="mt-3 text-[11px] text-amber-400 text-center">
                   Didn’t get the email? Check spam or request a new link from support. After confirming, return to
-                  <Link to="/confirmed" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
+                  <Link to="/login" className="ml-1 underline text-[#D4AF37] hover:text-[#FFD700]">this page</Link>.
                 </div>
               )}
 
@@ -448,34 +471,68 @@ const LoginPage = () => {
 
       <Modal
         open={forgotOpen}
-        onClose={() => setForgotOpen(false)}
+        onClose={closeForgotModal}
         title="Reset Password"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={closeForgotModal}>
+              {forgotStatusType === "success" ? "Close" : "Cancel"}
+            </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(forgotEmail)) {
-                  show("Enter a valid email", "error");
+                  setForgotStatus("Enter a valid email address.");
+                  setForgotStatusType("error");
                   return;
                 }
-                show("If this email exists, a reset link will be sent.", "success");
-                setForgotOpen(false);
+                try {
+                  setForgotSending(true);
+                  setForgotStatus("");
+                  await forgotPasswordAPI(forgotEmail.trim());
+                  setForgotStatus(
+                    "If this email exists, a reset link will be sent. Check your inbox and spam folder."
+                  );
+                  setForgotStatusType("success");
+                } catch (error) {
+                  setForgotStatus(error.message || "Could not send reset link.");
+                  setForgotStatusType("error");
+                } finally {
+                  setForgotSending(false);
+                }
               }}
+              disabled={forgotSending || forgotStatusType === "success"}
             >
-              Send link
+              {forgotSending ? "Sending..." : "Send link"}
             </Button>
           </div>
         }
       >
         <div className="space-y-3">
           <div className="text-sm text-gray-300">Enter your account email to receive a reset link.</div>
+          {forgotStatus && (
+            <div
+              role="status"
+              className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                forgotStatusType === "success"
+                  ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                  : "border-red-400/30 bg-red-500/10 text-red-200"
+              }`}
+            >
+              {forgotStatus}
+            </div>
+          )}
           <Input
             id="forgot-email"
             type="email"
             label="Email address"
             value={forgotEmail}
-            onChange={(e) => setForgotEmail(e.target.value)}
+            onChange={(e) => {
+              setForgotEmail(e.target.value);
+              if (forgotStatusType === "error") {
+                setForgotStatus("");
+                setForgotStatusType("info");
+              }
+            }}
           />
         </div>
       </Modal>

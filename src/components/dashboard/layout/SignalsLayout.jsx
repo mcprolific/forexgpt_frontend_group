@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import {
-  FiActivity, FiZap, FiMenu, FiX, FiTrash2, FiSearch,
+  FiActivity, FiZap, FiTrash2, FiSearch,
   FiTrendingUp, FiTrendingDown, FiMinus
 } from 'react-icons/fi';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import { getUserSignals, deleteSignal } from '../../../services/signalService';
 import toast from 'react-hot-toast';
@@ -24,7 +24,7 @@ const SignalsLayout = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -92,40 +92,17 @@ const SignalsLayout = () => {
   return (
     <div className="flex h-full rounded-3xl border border-white/5 overflow-hidden bg-black/20 backdrop-blur-sm relative">
 
-      {/* Mobile overlay when sidebar open */}
-      {isSidebarOpen && (
-        <div
-          onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 bg-black/60 z-30 md:hidden"
-        />
-      )}
-
-      {/* Mobile open button */}
-      <AnimatePresence>
-        {!isSidebarOpen && (
-          <Motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={() => setIsSidebarOpen(true)}
-            className="absolute left-4 top-4 z-50 p-3 rounded-xl bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 md:hidden"
-          >
-            <FiMenu className="w-5 h-5" />
-          </Motion.button>
-        )}
-      </AnimatePresence>
+      {/* Signals sidebar + hamburger removed */}
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <Motion.aside
         initial={false}
         animate={{
-          width: isSidebarOpen ? (window.innerWidth < 768 ? '300px' : '300px') : '0px',
-          x: isSidebarOpen ? 0 : (window.innerWidth < 768 ? -300 : 0)
+          width: '0px',
+          x: window.innerWidth < 768 ? -300 : 0
         }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className={`bg-black/40 border-r border-white/5 flex flex-col h-full overflow-hidden z-40
-          ${window.innerWidth < 768 ? 'fixed left-0 top-0 shadow-2xl' : 'relative'}
-        `}
+        className="hidden"
       >
         <div className="w-[300px] flex flex-col h-full">
 
@@ -247,18 +224,6 @@ const SignalsLayout = () => {
 
       {/* ── Main Content ─────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col h-full bg-transparent relative min-w-0">
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 p-1.5 bg-black border border-white/10 rounded-full hover:border-yellow-500/50 transition-all shadow-xl hidden lg:flex
-            ${!isSidebarOpen ? 'translate-x-[20px]' : ''}`}
-        >
-          {isSidebarOpen
-            ? <FiX className="w-3.5 h-3.5 text-yellow-500" />
-            : <FiMenu className="w-3.5 h-3.5 text-yellow-500" />
-          }
-        </button>
-
         <main className="flex-1 overflow-y-auto h-full p-4 md:p-8 lg:p-12">
           <Outlet />
         </main>

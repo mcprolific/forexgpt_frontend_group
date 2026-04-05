@@ -1,19 +1,35 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { loginAPI, registerAPI, confirmEmailAPI } from "./authAPI";
 
-const storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
-const storedUser = typeof localStorage !== "undefined" ? (() => {
+const readStorageValue = (key) => {
+  if (typeof localStorage === "undefined" || typeof sessionStorage === "undefined") {
+    return null;
+  }
+  return localStorage.getItem(key) || sessionStorage.getItem(key);
+};
+
+const readStoredUser = () => {
+  if (typeof localStorage === "undefined" || typeof sessionStorage === "undefined") {
+    return null;
+  }
   try {
-    const raw = localStorage.getItem("user");
+    const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
-})() : null;
+};
+
+const storedToken = readStorageValue("token");
+const storedRefreshToken = readStorageValue("refresh_token");
+const storedTokenExpiresAt = readStorageValue("token_expires_at");
+const storedUser = readStoredUser();
 
 const initialState = {
   user: storedUser,
   token: storedToken,
+  refreshToken: storedRefreshToken,
+  tokenExpiresAt: storedTokenExpiresAt ? Number(storedTokenExpiresAt) : null,
   loading: false,
   error: null,
 };
@@ -25,12 +41,7 @@ export const login = createAsyncThunk(
       const data = await loginAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.detail ||
-        error.response?.data?.message ||
-        error.message ||
-        "Login failed"
-      );
+      return rejectWithValue(error.message || "Login failed");
     }
   }
 );
@@ -42,7 +53,7 @@ export const registerUser = createAsyncThunk(
       const data = await registerAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Registration failed");
+      return rejectWithValue(error.message || "Registration failed");
     }
   }
 );
@@ -54,7 +65,7 @@ export const confirmEmail = createAsyncThunk(
       const data = await confirmEmailAPI(payload);
       return data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || "Confirmation failed");
+      return rejectWithValue(error.message || "Confirmation failed");
     }
   }
 );
@@ -71,9 +82,19 @@ const authSlice = createSlice({
     logoutUser: (state) => {
       state.user = null;
       state.token = null;
+      state.refreshToken = null;
+      state.tokenExpiresAt = null;
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("token_expires_at");
         localStorage.removeItem("user");
+      }
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("refresh_token");
+        sessionStorage.removeItem("token_expires_at");
+        sessionStorage.removeItem("user");
       }
     },
   },
@@ -87,18 +108,36 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         const token = action.payload?.token || null;
+        const refreshToken = action.payload?.refreshToken || null;
+        const expiresIn = action.payload?.expiresIn || null;
+        const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
-        if (token && typeof localStorage !== "undefined") {
-          localStorage.setItem("token", token);
+        const remember = Boolean(action.meta?.arg?.rememberMe);
+        const storage =
+          typeof localStorage !== "undefined" && remember
+            ? localStorage
+            : typeof sessionStorage !== "undefined"
+              ? sessionStorage
+              : null;
+        if (storage && token) {
+          storage.setItem("token", token);
         }
-        if (user && typeof localStorage !== "undefined") {
+        if (storage && refreshToken) {
+          storage.setItem("refresh_token", refreshToken);
+        }
+        if (storage && expiresAt) {
+          storage.setItem("token_expires_at", String(expiresAt));
+        }
+        if (storage && user) {
           try {
-            localStorage.setItem("user", JSON.stringify(user));
+            storage.setItem("user", JSON.stringify(user));
           } catch {
             // ignore
           }
         }
         state.token = token || state.token;
+        state.refreshToken = refreshToken || state.refreshToken;
+        state.tokenExpiresAt = expiresAt || state.tokenExpiresAt;
         state.user = user || state.user;
       })
       .addCase(login.rejected, (state, action) => {
@@ -126,18 +165,36 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         const token = action.payload?.tokens?.access_token || null;
+        const refreshToken = action.payload?.tokens?.refresh_token || null;
+        const expiresIn = action.payload?.tokens?.expires_in || null;
+        const expiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
         const user = action.payload?.user || null;
-        if (token && typeof localStorage !== "undefined") {
-          localStorage.setItem("token", token);
+        const remember = Boolean(action.meta?.arg?.rememberMe);
+        const storage =
+          typeof localStorage !== "undefined" && remember
+            ? localStorage
+            : typeof sessionStorage !== "undefined"
+              ? sessionStorage
+              : null;
+        if (storage && token) {
+          storage.setItem("token", token);
         }
-        if (user && typeof localStorage !== "undefined") {
+        if (storage && refreshToken) {
+          storage.setItem("refresh_token", refreshToken);
+        }
+        if (storage && expiresAt) {
+          storage.setItem("token_expires_at", String(expiresAt));
+        }
+        if (storage && user) {
           try {
-            localStorage.setItem("user", JSON.stringify(user));
+            storage.setItem("user", JSON.stringify(user));
           } catch {
             // ignore
           }
         }
         state.token = token || state.token;
+        state.refreshToken = refreshToken || state.refreshToken;
+        state.tokenExpiresAt = expiresAt || state.tokenExpiresAt;
         state.user = user || state.user;
       })
       .addCase(confirmEmail.rejected, (state, action) => {

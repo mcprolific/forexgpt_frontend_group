@@ -249,7 +249,7 @@ const PublicNavbar = () => {
               borderColor: isLight ? "rgba(0,0,0,0.08)" : "rgba(212,175,55,0.15)"
             }}
           >
-            <div className="fixed inset-0 -z-10 bg-black/50" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 -z-10 bg-black/50 cursor-pointer" onClick={() => setOpen(false)} />
             <div className="max-w-6xl mx-auto px-6 py-4 space-y-1">
 
               <MobileLink to="/why" close={() => setOpen(false)}>Why ForexGPT</MobileLink>
