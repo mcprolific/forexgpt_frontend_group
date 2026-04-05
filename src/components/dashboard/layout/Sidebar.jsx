@@ -63,7 +63,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   };
 
   const navItems = [
-    { path: "/dashboard", icon: FiHome, label: "Dashboard" },
+    { path: "/dashboard", icon: FiHome, label: "Dashboard", end: true },
     { path: "/dashboard/codegen", icon: FiCode, label: "Code Generation" },
     { path: "/dashboard/mentor", icon: FiMessageCircle, label: "Mentor" },
     { path: "/dashboard/signals", icon: FiActivity, label: "Signal Extraction" },
@@ -345,6 +345,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               <NavLink
                 key={item.path}
                 to={item.path}
+                end={item.end}
                 onClick={() => {
                   if (typeof window !== "undefined" && window.innerWidth < 768) {
                     toggleSidebar();

@@ -6,10 +6,11 @@ import {
   FiShield,
   FiEye,
   FiDatabase,
-  FiChevronRight,
+  FiArrowLeft,
   FiZap,
   FiCheck
 } from "react-icons/fi";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 
 const GOLD = "#D4AF37";
@@ -51,6 +52,8 @@ const defaultSettings = {
 
 const SettingsPage = () => {
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('General');
   const [settingsByCategory, setSettingsByCategory] = useState(() => {
     if (typeof localStorage === "undefined") return [];
@@ -116,12 +119,27 @@ const SettingsPage = () => {
     });
   }, [theme]);
 
+  const returnTo = location.state?.returnTo || "/dashboard";
+  const returnLabel = location.state?.returnLabel || "Dashboard";
+
+  const handleGoBack = () => {
+    navigate(returnTo);
+  };
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
 
       {/* Header Section */}
       <div className="flex items-center justify-between">
         <div>
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-300 transition-all hover:border-yellow-500/30 hover:text-yellow-500"
+          >
+            <FiArrowLeft className="w-4 h-4" />
+            Back to {returnLabel}
+          </button>
           <h1 className="text-3xl font-black text-white flex items-center gap-3">
             <FiSettings className="text-yellow-500" />
             System <span className="bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(135deg, ${GOLD_LIGHT}, ${GOLD})` }}>Intelligence</span>

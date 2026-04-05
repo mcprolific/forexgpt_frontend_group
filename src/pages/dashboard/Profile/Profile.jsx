@@ -4,6 +4,7 @@ import {
   FiMail,
   FiClock,
   FiAward,
+  FiArrowLeft,
   FiEdit2,
   FiSave,
   FiX,
@@ -14,7 +15,8 @@ import {
   FiBarChart2,
   FiChevronRight
 } from 'react-icons/fi';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getProfile, updateProfile, getDashboardStats } from '../../../services/userService';
 import LoadingScreen from '../../../components/ui/LoadingScreen';
@@ -24,6 +26,8 @@ const GOLD_LIGHT = "#FFD700";
 
 const Profile = () => {
   const { user: authUser } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState(null);
@@ -90,8 +94,20 @@ const Profile = () => {
     show: { opacity: 1, y: 0 }
   };
 
+  const returnTo = location.state?.returnTo || '/dashboard';
+  const returnLabel = location.state?.returnLabel || 'Dashboard';
+
   return (
     <div className="space-y-10 max-w-5xl mx-auto pb-20">
+
+      <button
+        type="button"
+        onClick={() => navigate(returnTo)}
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-300 transition-all hover:border-yellow-500/30 hover:text-yellow-500"
+      >
+        <FiArrowLeft className="w-4 h-4" />
+        Back to {returnLabel}
+      </button>
 
       {/* Premium Profile Header Card */}
       <Motion.div
