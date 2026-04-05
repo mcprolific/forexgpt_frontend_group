@@ -104,11 +104,7 @@ const CodeGeneration = () => {
       }
     }
 
-<<<<<<< HEAD
     if (state.prefilledDescription) {
-=======
-    if (state.fromSignals && state.prefilledDescription) {
->>>>>>> c67ada9156c0428cb612866da019267b08460d66
       setNewMessage(state.prefilledDescription);
     }
 
@@ -268,18 +264,9 @@ const CodeGeneration = () => {
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
-<<<<<<< HEAD
-          // Always append the assistant reply first so the user sees it,
-          // then update the URL if this was a brand-new conversation.
-          setMessages((prev) => [...prev, assistantMsg]);
-          if (assistantMsg.code) {
-            setLatestGeneratedCode(assistantMsg.code);
-          }
-=======
         // Always append the assistant reply first so the user sees it,
         // then update the URL if this was a brand-new conversation.
         setMessages((prev) => [...prev, assistantMsg]);
->>>>>>> c67ada9156c0428cb612866da019267b08460d66
 
         if (conversationId === 'new') {
           navigate(`/dashboard/codegen/session/${response.conversation_id}`, {

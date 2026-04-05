@@ -1045,7 +1045,7 @@ const MentorMessages = () => {
 
       {/* Input — at bottom when messages exist, centered when empty */}
       <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0'}`}>
-        <div className="relative group w-full max-w-2xl">
+        <div className="relative group w-full">
           <textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
