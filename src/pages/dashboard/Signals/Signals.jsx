@@ -20,6 +20,7 @@ import SignalCard from '../../../components/dashboard/cards/SignalCard';
 import SignalResult from '../../../components/dashboard/signals/SignalResult';
 import LoadingScreen from '../../../components/ui/LoadingScreen';
 import toast from 'react-hot-toast';
+import { logError, normalizeError } from '../../../utils/errorHandling';
 
 const GOLD = '#D4AF37';
 const GOLD_LIGHT = '#FFD700';
@@ -212,9 +213,11 @@ const Signals = () => {
           : statsData
       );
     } catch (err) {
-      console.error('Fetch error:', err);
-      toast.error('Failed to load signals');
-      setErrorMessage('Failed to load signals. Please try again.');
+      logError('Fetch error:', err);
+      toast.error(normalizeError(err, { fallback: 'Failed to load signals.' }));
+      setErrorMessage(
+        normalizeError(err, { fallback: 'Failed to load signals. Please try again.' })
+      );
     } finally {
       setLoading(false);
     }
@@ -248,7 +251,7 @@ const Signals = () => {
           setSelectedSignal(nextDetail || fromCache || null);
         }
       } catch (error) {
-        console.error("Failed to load signal detail:", error);
+        logError("Failed to load signal detail:", error);
       } finally {
         if (!cancelled) {
           navigate(location.pathname, { replace: true, state: null });
@@ -305,8 +308,9 @@ const Signals = () => {
         window.dispatchEvent(new Event("fgpt-signal-history-updated"));
       }
     } catch (err) {
-      toast.error(`Extraction failed: ${err.response?.data?.detail || err.message}`, { id: t });
-      setErrorMessage('Extraction failed. Please try again.');
+      const msg = normalizeError(err, { fallback: 'Extraction failed. Please try again.' });
+      toast.error(msg, { id: t });
+      setErrorMessage(msg);
     } finally {
       setExtracting(false);
     }
@@ -346,8 +350,9 @@ const Signals = () => {
         window.dispatchEvent(new Event("fgpt-signal-history-updated"));
       }
     } catch (err) {
-      toast.error(`Batch failed: ${err.response?.data?.detail || err.message}`, { id: t });
-      setErrorMessage('Batch failed. Please try again.');
+      const msg = normalizeError(err, { fallback: 'Batch failed. Please try again.' });
+      toast.error(msg, { id: t });
+      setErrorMessage(msg);
     } finally {
       setExtracting(false);
     }
@@ -364,9 +369,12 @@ const Signals = () => {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("fgpt-signal-history-updated"));
       }
-    } catch {
-      toast.error('Failed to purge signal');
-      setErrorMessage('Failed to delete signal. Please try again.');
+    } catch (err) {
+      logError('Failed to purge signal:', err);
+      toast.error(normalizeError(err, { fallback: 'Failed to delete signal.' }));
+      setErrorMessage(
+        normalizeError(err, { fallback: 'Failed to delete signal. Please try again.' })
+      );
     }
   };
 

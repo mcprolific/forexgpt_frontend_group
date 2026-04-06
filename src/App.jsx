@@ -2,9 +2,10 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import ProtectedRoute from './layout/ProtectedRoute';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import LoadingScreen from './components/ui/LoadingScreen';
-import { logoutUser } from './features/auth/authSlice';
+import { logoutUser, setTokens } from './features/auth/authSlice';
+import { refreshTokenAPI } from './features/auth/authAPI';
 
 // ── Layouts (lazy) ────────────────────────────────────────────────────
 const DashboardLayout      = lazy(() => import('./components/dashboard/layout/DashboardLayout'));
@@ -53,13 +54,16 @@ const TranscriptDashboard = lazy(() => import('./pages/dashboard/Transcript/Tran
 
 function App() {
   const dispatch = useDispatch();
-  const { user, token } = useSelector((state) => state.auth);
+  const { user, token, refreshToken, tokenExpiresAt } = useSelector((state) => state.auth);
   const inactivityTimerRef = useRef(null);
   const warningTimerRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
   const countdownIntervalRef = useRef(null);
+  const refreshTimerRef = useRef(null);
+  const refreshFailureNotifiedRef = useRef(false);
   const INACTIVITY_MS = 10 * 60 * 1000;
   const WARNING_MS = 1 * 60 * 1000;
+  const REFRESH_WINDOW_MS = 5 * 60 * 1000;
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [warningSecondsLeft, setWarningSecondsLeft] = useState(60);
 
@@ -111,6 +115,87 @@ function App() {
       events.forEach((evt) => window.removeEventListener(evt, resetTimer));
     };
   }, [dispatch, token, user, showInactivityWarning]);
+
+  const handleRefreshFailure = () => {
+    if (!refreshFailureNotifiedRef.current) {
+      refreshFailureNotifiedRef.current = true;
+      toast.error("Session expired — please log in again.");
+    }
+    dispatch(logoutUser());
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+  };
+
+  const applyRefreshedTokens = (data) => {
+    const nextToken = data?.tokens?.access_token || data?.access_token || data?.token || null;
+    const nextRefresh = data?.tokens?.refresh_token || data?.refresh_token || null;
+    const expiresIn = data?.tokens?.expires_in || data?.expires_in || null;
+    const nextExpiresAt = expiresIn ? Date.now() + Number(expiresIn) * 1000 : null;
+
+    if (nextToken) {
+      dispatch(setTokens({
+        token: nextToken,
+        refreshToken: nextRefresh || refreshToken,
+        tokenExpiresAt: nextExpiresAt,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (!tokenExpiresAt || !refreshToken) return undefined;
+
+    const scheduleRefresh = () => {
+      const now = Date.now();
+      const targetAt = Math.max(tokenExpiresAt - REFRESH_WINDOW_MS, now + 1000);
+      const delay = Math.max(targetAt - now, 0);
+
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+
+      refreshTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await refreshTokenAPI(refreshToken);
+          applyRefreshedTokens(data);
+        } catch {
+          handleRefreshFailure();
+        }
+      }, delay);
+    };
+
+    scheduleRefresh();
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, [dispatch, refreshToken, tokenExpiresAt]);
+
+  useEffect(() => {
+    if (!refreshToken || !tokenExpiresAt) return undefined;
+    const now = Date.now();
+    const isNearExpiry = tokenExpiresAt - now <= REFRESH_WINDOW_MS;
+    if (!isNearExpiry) return undefined;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const data = await refreshTokenAPI(refreshToken);
+        if (cancelled) return;
+        applyRefreshedTokens(data);
+      } catch {
+        if (cancelled) return;
+        handleRefreshFailure();
+      }
+    };
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshToken, tokenExpiresAt]);
 
   return (
     <>

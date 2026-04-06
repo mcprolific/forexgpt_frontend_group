@@ -6,6 +6,55 @@ const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   "http://127.0.0.1:8000";
 
+const readTokenPair = () => {
+  const access =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+  const refresh =
+    localStorage.getItem("refresh_token") ||
+    sessionStorage.getItem("refresh_token");
+  return { access, refresh };
+};
+
+const storeTokenPair = (access, refresh) => {
+  const storage =
+    localStorage.getItem("refresh_token") || localStorage.getItem("token")
+      ? localStorage
+      : sessionStorage;
+  if (access) storage.setItem("token", access);
+  if (refresh) storage.setItem("refresh_token", refresh);
+};
+
+const tryRefreshToken = async (refreshToken) => {
+  if (!refreshToken) return null;
+  const candidates = ["/refresh", "/auth/refresh"];
+  let lastError;
+
+  for (const path of candidates) {
+    try {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!res.ok) {
+        lastError = new Error(`Refresh failed: ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      const nextToken =
+        data?.tokens?.access_token || data?.access_token || data?.token || null;
+      const nextRefresh =
+        data?.tokens?.refresh_token || data?.refresh_token || null;
+      if (nextToken) storeTokenPair(nextToken, nextRefresh);
+      return nextToken;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError;
+};
+
 /**
  * Stream a mentor response chunk-by-chunk.
  *
@@ -18,11 +67,10 @@ const BASE_URL =
  * @param {function} [opts.onConversationId] - Called when a conversation id is discovered
  */
 export async function streamMentorResponse({ question, conversationId, userId, onChunk, onDone, onError, onConversationId }) {
-  const token =
-    localStorage.getItem("token") || sessionStorage.getItem("token");
+  const { access, refresh } = readTokenPair();
   const headers = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(access ? { Authorization: `Bearer ${access}` } : {}),
   };
 
   // Body matches the backend AskStreamRequest Pydantic model
@@ -32,12 +80,47 @@ export async function streamMentorResponse({ question, conversationId, userId, o
     ...(userId ? { user_id: userId } : {}),
   });
 
-  try {
+  const runStream = async (authToken) => {
+    const nextHeaders = {
+      ...headers,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
     const response = await fetch(`${BASE_URL}/mentor/ask/stream`, {
       method: "POST",
-      headers,
+      headers: nextHeaders,
       body,
     });
+    return response;
+  };
+
+  const runFallback = async (authToken) => {
+    const nextHeaders = {
+      ...headers,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+    const fallback = await fetch(`${BASE_URL}/mentor/conversations`, {
+      method: "POST",
+      headers: nextHeaders,
+      body: JSON.stringify({
+        message: question,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        ...(userId ? { user_id: userId } : {}),
+      }),
+    });
+    return fallback;
+  };
+
+  try {
+    let response = await runStream(access);
+
+    if (response.status === 401 && refresh) {
+      try {
+        const nextToken = await tryRefreshToken(refresh);
+        response = await runStream(nextToken);
+      } catch (refreshErr) {
+        // keep response as 401 for fallback handling below
+      }
+    }
 
     const headerConversationId =
       response.headers.get("x-conversation-id") ||
@@ -48,16 +131,9 @@ export async function streamMentorResponse({ question, conversationId, userId, o
     }
 
     // --- Fallback: streaming endpoint not yet deployed ---
-    if (response.status === 404 || !response.body) {
-      const fallback = await fetch(`${BASE_URL}/mentor/conversations`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          message: question,
-          ...(conversationId ? { conversation_id: conversationId } : {}),
-          ...(userId ? { user_id: userId } : {}),
-        }),
-      });
+    if (response.status === 404 || response.status === 401 || !response.body) {
+      const { access: latestAccess } = readTokenPair();
+      const fallback = await runFallback(latestAccess);
       if (!fallback.ok) throw new Error(`Mentor API error: ${fallback.status}`);
       const data = await fallback.json();
       if (data?.conversation_id && onConversationId) {

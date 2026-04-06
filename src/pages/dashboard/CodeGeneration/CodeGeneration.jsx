@@ -30,6 +30,7 @@ import {
   updateGeneratedCode,
 } from "../../../services/codeGenService";
 import { formatLongDateTime } from "../../../utils/formatters";
+import { logError, normalizeError } from "../../../utils/errorHandling";
 
 const sanitizeFileName = (value) =>
   (value || "strategy")
@@ -85,23 +86,15 @@ const CodeGeneration = () => {
   const inputRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     const state = location.state || {};
     if (!Object.keys(state).length) return;
 
     if (state.fromMentor) {
-      const strategyType = state.strategyType || '';
-      const context = state.context || state.strategyText || '';
-      const mentorPrompt = strategyType
-        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
-        : context
-          ? `Create a trading strategy based on: ${context}`
-          : '';
-
-      if (mentorPrompt) {
-        setNewMessage(mentorPrompt);
-      }
+      const prompt = state.strategyText || '';
+      if (prompt) setNewMessage(prompt);
     }
 
     if (state.prefilledDescription) {
@@ -148,12 +141,15 @@ const CodeGeneration = () => {
         const nextHistory = history.length > 0 ? history : cachedHistory;
         setMessages(nextHistory);
         localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
+        localStorage.setItem(getLastConversationKey(userId), conversationId);
       } catch (error) {
-        console.error("Error fetching logic history:", error);
+        logError("Codegen history load failed:", error);
         if (cachedHistory.length > 0) {
           setMessages(cachedHistory);
         }
-        setErrorMessage("Failed to load conversation. Please try again.");
+        setErrorMessage(
+          normalizeError(error, { fallback: "Failed to load conversation. Please try again." })
+        );
       } finally {
         setLoading(false);
       }
@@ -218,7 +214,8 @@ const CodeGeneration = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || sending || !userId) return;
+    if (!newMessage.trim() || sending || sendingRef.current || !userId) return;
+    sendingRef.current = true;
 
     const userContent = newMessage;
     setNewMessage("");
@@ -294,7 +291,7 @@ const CodeGeneration = () => {
               window.dispatchEvent(new Event("fgpt-codegen-history-updated"));
             }
           } catch (error) {
-            console.error("Failed to persist codegen history:", error);
+            logError("Failed to persist codegen history:", error);
           }
         }
       } else {
@@ -310,11 +307,10 @@ const CodeGeneration = () => {
         ]);
       }
     } catch (error) {
-      console.error("Error generating logic:", error);
-      const errMsg =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to generate code. Please try again.";
+      logError("Codegen generation failed:", error);
+      const errMsg = normalizeError(error, {
+        fallback: "Failed to generate code. Please try again.",
+      });
       setErrorMessage(errMsg);
       setMessages((prev) => [
         ...prev,
@@ -327,11 +323,13 @@ const CodeGeneration = () => {
       ]);
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 
   const handleImproveStrategy = async () => {
-    if (sending || !userId || !originalCode) return;
+    if (sending || sendingRef.current || !userId || !originalCode) return;
+    sendingRef.current = true;
 
     setSending(true);
     setErrorMessage("");
@@ -390,11 +388,14 @@ const CodeGeneration = () => {
         }
       }
     } catch (error) {
-      console.error("Error improving strategy:", error);
-      setErrorMessage("Failed to improve strategy. Please try again.");
+      logError("Codegen improvement failed:", error);
+      setErrorMessage(
+        normalizeError(error, { fallback: "Failed to improve strategy. Please try again." })
+      );
       setMessages((prev) => prev.filter((message) => message.id !== userMsg.id));
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 

@@ -6,6 +6,7 @@ import { getBacktestResult, deleteBacktest } from '../../../services/backtestSer
 import BacktestForm from '../../../components/dashboard/backtest/BacktestForm';
 import BacktestResults from '../../../components/dashboard/backtest/BacktestResults';
 import toast from 'react-hot-toast';
+import { logError, normalizeError } from '../../../utils/errorHandling';
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -139,8 +140,9 @@ const Backtests = () => {
         setDetailLoading(true);
         const data = await getBacktestResult(userId, backtestId);
         setResult(data);
-      } catch {
-        toast.error('Could not load this simulation.');
+      } catch (error) {
+        logError('Backtest load failed:', error);
+        toast.error(normalizeError(error, { fallback: 'Could not load this simulation.' }));
         navigate('/dashboard/backtest', { replace: true });
       } finally {
         setDetailLoading(false);
@@ -160,8 +162,9 @@ const Backtests = () => {
       // Note: We might want a way to tell the layout to refresh its list
       // A simple way is to use window.location.reload() or a more React-y way
       // For now, let's assume the user can manually refresh or the layout handles it.
-    } catch {
-      toast.error('Could not delete simulation.');
+    } catch (error) {
+      logError('Backtest delete failed:', error);
+      toast.error(normalizeError(error, { fallback: 'Could not delete simulation.' }));
     }
   };
 

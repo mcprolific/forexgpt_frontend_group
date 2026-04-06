@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import { runBacktest } from "../services/backtestService";
 import CandlestickChart from "../components/dashboard/backtest/CandlestickChart";
 import toast from "react-hot-toast";
+import { logError, normalizeError } from "../utils/errorHandling";
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
@@ -45,7 +46,7 @@ const BacktestPage = () => {
 
   const onSubmit = async () => {
     if (!userId) {
-      toast.error("Login required");
+      toast.error(normalizeError({ response: { status: 401 } }, { fallback: "Login required" }));
       return;
     }
     setSubmitting(true);
@@ -55,7 +56,11 @@ const BacktestPage = () => {
       setResult(res);
       toast.success("Backtest complete", { id: t });
     } catch (e) {
-      toast.error("Backtest failed", { id: t });
+      logError("Backtest (public) failed:", e);
+      toast.error(
+        normalizeError(e, { fallback: "Backtest failed. Please try again." }),
+        { id: t }
+      );
     } finally {
       setSubmitting(false);
     }

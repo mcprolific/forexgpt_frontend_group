@@ -1,6 +1,86 @@
 import React from 'react';
 import { motion as Motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import {
+  FiCode,
+  FiCpu,
+  FiMessageCircle,
+  FiMinus,
+  FiTrendingDown,
+  FiTrendingUp,
+} from 'react-icons/fi';
+
+const DIR_CONFIG = {
+  LONG: {
+    label: 'Long',
+    icon: FiTrendingUp,
+    badge: 'bg-green-500/15 text-green-300 border border-green-500/20',
+    dot: 'bg-green-400',
+    gradient: 'from-green-500/10 via-transparent to-transparent',
+    border: 'border-green-500/20',
+    glow: 'shadow-green-500/10',
+  },
+  SHORT: {
+    label: 'Short',
+    icon: FiTrendingDown,
+    badge: 'bg-red-500/15 text-red-300 border border-red-500/20',
+    dot: 'bg-red-400',
+    gradient: 'from-red-500/10 via-transparent to-transparent',
+    border: 'border-red-500/20',
+    glow: 'shadow-red-500/10',
+  },
+  NEUTRAL: {
+    label: 'Neutral',
+    icon: FiMinus,
+    badge: 'bg-white/10 text-gray-300 border border-white/10',
+    dot: 'bg-gray-400',
+    gradient: 'from-white/5 via-transparent to-transparent',
+    border: 'border-white/10',
+    glow: 'shadow-white/5',
+  },
+};
+
+const Tag = ({ label, value }) => (
+  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-gray-300">
+    <span className="text-gray-500">{label}</span>
+    <span className="text-white">{value}</span>
+  </span>
+);
+
+const ConfidenceRing = ({ pct = 0 }) => {
+  const value = Math.max(0, Math.min(100, Number(pct) || 0));
+  const radius = 26;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+  return (
+    <div className="flex items-center justify-center h-16 w-16 relative">
+      <svg width="64" height="64" className="-rotate-90">
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth="6"
+          fill="transparent"
+        />
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          stroke="#D4AF37"
+          strokeWidth="6"
+          fill="transparent"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="absolute text-[10px] font-black text-yellow-400">
+        {value}%
+      </div>
+    </div>
+  );
+};
 
 const SignalResult = ({ signal, user }) => {
   const navigate = useNavigate();
