@@ -12,6 +12,7 @@ import Input from "./ui/Input";
 import Button from "./ui/Button";
 import Toast from "./ui/Toast";
 import useToast from "../hooks/useToast";
+import { logError, normalizeError } from "../utils/errorHandling";
 
 const floatPulse = {
   animate: {
@@ -232,8 +233,10 @@ const AICopilot = () => {
         show("Copilot answered", "success");
       },
       onError: (err) => {
-        console.error("Streaming error:", err);
-        const fallback = "Unable to reach mentor service.";
+        logError("Streaming error:", err);
+        const fallback = normalizeError(err, {
+          fallback: "Unable to reach mentor service.",
+        });
         setMessages((prev) =>
           prev.map((m) =>
             m.id === streamingId

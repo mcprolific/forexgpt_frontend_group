@@ -24,6 +24,7 @@ import {
 import { streamMentorResponse } from '../../../features/mentor/mentorStream';
 import toast from 'react-hot-toast';
 import { formatLongDateTime } from '../../../utils/formatters';
+import { logError, normalizeError } from '../../../utils/errorHandling';
 
 const STRATEGY_PATTERNS = [
   { label: 'mean reversion', regex: /mean\s*reversion/i },
@@ -37,6 +38,14 @@ const STRATEGY_PATTERNS = [
 
 const detectStrategyType = (text) =>
   STRATEGY_PATTERNS.find(({ regex }) => regex.test(text || ''))?.label ?? null;
+
+const isCodegenCandidate = (content) => {
+  const line = extractStrategyLine(content);
+  if (!line) return false;
+  return /(strategy|entry|exit|rule|indicator|signal|trade|setup|algorithm|logic)/i.test(
+    line
+  );
+};
 
 const extractStrategyLine = (content) => {
   if (!content) return '';
@@ -515,13 +524,15 @@ const MentorMessages = () => {
         localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
         localStorage.setItem(getLastConversationKey(userId), conversationId);
       } catch (error) {
-        console.error('Failed to load history:', error);
+        logError('Mentor history load failed:', error);
         if (cachedHistory.length > 0) {
           setMessages(cachedHistory);
         } else {
-          toast.error('Failed to load history');
+          toast.error(normalizeError(error, { fallback: 'Failed to load history.' }));
         }
-        setErrorMessage('Failed to load conversation. Please try again.');
+        setErrorMessage(
+          normalizeError(error, { fallback: 'Failed to load conversation. Please try again.' })
+        );
       } finally {
         setLoading(false);
       }
@@ -612,8 +623,8 @@ const MentorMessages = () => {
         });
       } catch (error) {
         if (!cancelled) {
-          console.error('Analysis failed:', error);
-          toast.error('Analysis failed');
+          logError('Mentor analysis failed:', error);
+          toast.error(normalizeError(error, { fallback: 'Analysis failed.' }));
         }
       } finally {
         if (!cancelled) {
@@ -631,8 +642,8 @@ const MentorMessages = () => {
       await navigator.clipboard.writeText(text);
       toast.success(successMessage);
     } catch (error) {
-      console.error('Copy failed:', error);
-      toast.error('Could not copy');
+      logError('Copy failed:', error);
+      toast.error(normalizeError(error, { fallback: 'Could not copy.' }));
     }
   };
 
@@ -723,7 +734,7 @@ const MentorMessages = () => {
                 await getConversations(userIdRef.current);
               }
             } catch (error) {
-              console.error('Failed to refresh mentor history:', error);
+              logError('Failed to refresh mentor history:', error);
             } finally {
               window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
             }
@@ -734,6 +745,10 @@ const MentorMessages = () => {
         if (conversationId === 'new') {
           localStorage.removeItem(getDraftKey(userId));
           if (activeConversationIdRef.current) {
+            localStorage.setItem(
+              getLastConversationKey(userId),
+              activeConversationIdRef.current
+            );
             navigate(`/dashboard/mentor/messages/${activeConversationIdRef.current}`, {
               replace: true,
               state: { skipFetch: true },
@@ -742,9 +757,12 @@ const MentorMessages = () => {
         }
       },
       onError: (err) => {
-        console.error('Streaming failed:', err);
-        toast.error('Failed to send message');
-        setErrorMessage('Failed to send message. Please try again.');
+        logError('Mentor stream failed:', err);
+        const msg = normalizeError(err, {
+          fallback: 'Failed to send message. Please try again.',
+        });
+        toast.error(msg);
+        setErrorMessage(msg);
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         setStreamingContent('');
         streamAccumulator.current = '';
@@ -901,7 +919,8 @@ const MentorMessages = () => {
             {messages.map((message, idx) => {
               const showGenerateCode =
                 message.role === 'assistant' &&
-                Boolean(detectStrategyType(message.content));
+                Boolean(detectStrategyType(message.content)) &&
+                isCodegenCandidate(message.content);
               const showImproveStrategy =
                 message.role === 'assistant' &&
                 analysisMode &&

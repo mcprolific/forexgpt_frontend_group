@@ -5,6 +5,7 @@ import { FiPlay, FiAlertCircle, FiLoader, FiCode } from 'react-icons/fi';
 import { useAuth } from '../../../contexts/AuthContext';
 import { runBacktest, runCustomBacktest } from '../../../services/backtestService';
 import toast from 'react-hot-toast';
+import { logError, normalizeError } from '../../../utils/errorHandling';
 
 const GOLD = '#D4AF37';
 
@@ -66,6 +67,7 @@ const BacktestForm = () => {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -159,7 +161,10 @@ const BacktestForm = () => {
                     : null,
             });
         } catch (err) {
-            const msg = err?.response?.data?.detail || 'Backtest failed. Please check your inputs.';
+            logError('Backtest error (raw):', err);
+            const msg = normalizeError(err, {
+                fallback: 'Backtest failed. Please check your inputs and try again.',
+            });
             setError(msg);
             toast.error(msg);
         } finally {

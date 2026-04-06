@@ -20,6 +20,51 @@ const DirectionIcon = ({ direction }) => {
   return <FiMinus className="w-3.5 h-3.5 text-gray-500" />;
 };
 
+class SignalsErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Signals error boundary:', error, info);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 min-h-[60vh] flex items-center justify-center">
+          <div className="max-w-md w-full rounded-3xl border border-yellow-500/20 bg-yellow-500/5 p-6 text-center space-y-3">
+            <div className="text-xs font-black uppercase tracking-[0.3em] text-yellow-500">
+              Signals Error
+            </div>
+            <p className="text-sm text-gray-300">
+              Something went wrong while rendering Signals. Try resetting this view.
+            </p>
+            <button
+              type="button"
+              onClick={this.handleReset}
+              className="px-4 py-2 rounded-xl bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+            >
+              Reset Signals View
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const SignalsLayout = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
@@ -225,7 +270,9 @@ const SignalsLayout = () => {
       {/* ── Main Content ─────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col h-full bg-transparent relative min-w-0">
         <main className="flex-1 overflow-y-auto h-full p-4 md:p-8 lg:p-12">
-          <Outlet />
+          <SignalsErrorBoundary>
+            <Outlet />
+          </SignalsErrorBoundary>
         </main>
       </div>
     </div>
