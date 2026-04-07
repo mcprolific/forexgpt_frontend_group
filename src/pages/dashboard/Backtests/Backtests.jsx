@@ -171,6 +171,20 @@ const Backtests = () => {
   const handleUnderstandFailure = () => {
     if (!result || !metricsForMentor) return;
 
+    if (typeof localStorage !== "undefined") {
+      const pendingKey = `fgpt_mentor_backtest_pending_${userId || "anon"}`;
+      localStorage.setItem(
+        pendingKey,
+        JSON.stringify({
+          mode: "analyze",
+          strategyType: metricsForMentor.strategy_name,
+          strategyCode,
+          results: metricsForMentor,
+          metricsForMentor,
+        })
+      );
+    }
+
     navigate('/dashboard/mentor/messages/new', {
       state: {
         mode: 'analyze',
