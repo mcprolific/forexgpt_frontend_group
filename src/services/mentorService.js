@@ -286,7 +286,27 @@ export const deleteConversation = async (conversationId, userId) => {
 // ==============================
 export const analyzeBacktest = async (payload) => {
   try {
-    const res = await axiosInstance.post("/mentor/analyze-backtest", payload);
+    const metrics =
+      payload?.metrics ||
+      payload?.results ||
+      payload?.backtest_results ||
+      payload?.backtestResults ||
+      {};
+
+    const requestBody = {
+      backtest_context: {
+        strategy_type:
+          payload?.strategy_type ||
+          payload?.strategyType ||
+          metrics?.strategy_name ||
+          "custom",
+        metrics,
+        parameters: payload?.parameters || payload?.strategy_params || {},
+        backtest_id: payload?.backtest_id || payload?.backtestId || metrics?.backtest_id || null,
+      },
+    };
+
+    const res = await axiosInstance.post("/mentor/backtest-conversations", requestBody);
     return res.data;
   } catch (error) {
     console.error("Analyze Backtest Error:", error);
