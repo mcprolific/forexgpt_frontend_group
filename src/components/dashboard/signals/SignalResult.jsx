@@ -8,7 +8,7 @@ const SignalResult = ({ signal, user }) => {
 
   const data = {
     company: signal.company_name || signal.source_label || 'Unknown',
-    pair: signal.currency_pair || signal.base_currency || '—',
+    pair: signal.currency_pair || signal.base_currency || 'N/A',
     detected: signal.signal === false ? 'NO' : 'YES',
     direction: (signal.direction || signal.primary_direction || 'NEUTRAL').toUpperCase(),
     confidence: signal.confidence != null ? Math.round(signal.confidence * 100) : 0,
@@ -127,11 +127,11 @@ const SignalResult = ({ signal, user }) => {
 
         {/* ── Meta footer ── */}
         <div className="flex flex-wrap items-center gap-3 text-[9px] text-gray-600 font-bold uppercase tracking-widest">
-          <span>ID: {String(data.id).slice(0, 8)}…</span>
-          <span className="text-white/10">•</span>
+          <span>ID: {String(data.id).slice(0, 8)}...</span>
+          <span className="text-white/10">|</span>
           <span>{new Date(data.time).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-          <span className="text-white/10">•</span>
-          <span>User: {String(data.userId || '—').slice(0, 8)}…</span>
+          <span className="text-white/10">|</span>
+          <span>User: {String(data.userId || 'N/A').slice(0, 8)}...</span>
         </div>
 
         {/* ── Action buttons ── */}

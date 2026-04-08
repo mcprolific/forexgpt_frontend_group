@@ -123,6 +123,18 @@ const SignalRow = ({ signal, onDelete, onClick }) => (
   </Motion.div>
 );
 
+const getSignalPairLabel = (signal, fallback = 'No pair detected') =>
+  signal?.currency_pair || signal?.base_currency || fallback;
+
+const getSignalDirectionLabel = (signal, fallback = 'No signal') =>
+  signal?.direction || signal?.primary_direction || fallback;
+
+const getSignalConfidenceLabel = (signal) =>
+  signal?.confidence != null ? `${Math.round(signal.confidence * 100)}%` : 'N/A';
+
+const getSignalHeadline = (signal) =>
+  `${getSignalPairLabel(signal)} - ${getSignalDirectionLabel(signal)}`;
+
 
 // --- Main Page ----------------------------------------------------------------
 const Signals = () => {
@@ -292,7 +304,7 @@ const Signals = () => {
       //         confidence, reasoning, magnitude, time_horizon, signal_id, ... }
       if (result?.signal) {
         toast.success(
-          `Signal detected � ${result.direction || 'direction unknown'}  ${result.currency_pair || ''}`,
+          `Signal detected - ${getSignalDirectionLabel(result, 'direction unknown')} ${getSignalPairLabel(result, 'unknown pair')}`,
           { id: t, duration: 5000 }
         );
       } else {
@@ -337,7 +349,7 @@ const Signals = () => {
       }
       // result: BatchSignalResponse { signals: [SignalResponse], total, signals_found }
       toast.success(
-        `Batch complete � ${result.signals_found}/${result.total} signals found`,
+        `Batch complete - ${result.signals_found}/${result.total} signals found`,
         { id: t, duration: 5000 }
       );
       setBatchEntries([{ company_name: '', text: '' }]);
@@ -493,10 +505,10 @@ const Signals = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white truncate">
-                      {lastSingleResult.currency_pair || 'PAIR'} ï¿½ {lastSingleResult.direction || 'ï¿½'}
+                      {getSignalHeadline(lastSingleResult)}
                     </span>
                     <span className="text-[10px] font-black text-yellow-500">
-                      {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : 'ï¿½'}
+                      {getSignalConfidenceLabel(lastSingleResult)}
                     </span>
                   </div>
                   {lastSingleResult.reasoning && (
@@ -515,10 +527,10 @@ const Signals = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white truncate">
-                      {r.currency_pair || 'PAIR'} ï¿½ {r.direction || 'ï¿½'}
+                      {getSignalHeadline(r)}
                     </span>
                     <span className="text-[10px] font-black text-yellow-500">
-                      {r.confidence != null ? Math.round(r.confidence * 100) + '%' : 'ï¿½'}
+                      {getSignalConfidenceLabel(r)}
                     </span>
                   </div>
                   {r.reasoning && (
@@ -756,10 +768,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {lastSingleResult.currency_pair || 'PAIR'} ï¿½ {lastSingleResult.direction || 'ï¿½'}
+                          {getSignalHeadline(lastSingleResult)}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {lastSingleResult.confidence != null ? Math.round(lastSingleResult.confidence * 100) + '%' : 'ï¿½'}
+                          {getSignalConfidenceLabel(lastSingleResult)}
                         </span>
                       </div>
                       {lastSingleResult.reasoning && (
@@ -778,10 +790,10 @@ const Signals = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-white truncate">
-                          {r.currency_pair || 'PAIR'} ï¿½ {r.direction || 'ï¿½'}
+                          {getSignalHeadline(r)}
                         </span>
                         <span className="text-[10px] font-black text-yellow-500">
-                          {r.confidence != null ? Math.round(r.confidence * 100) + '%' : 'ï¿½'}
+                          {getSignalConfidenceLabel(r)}
                         </span>
                       </div>
                       {r.reasoning && (
