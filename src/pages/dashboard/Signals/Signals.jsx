@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FiFilter, FiZap, FiCpu, FiPlus, FiTrash2, FiClock,
@@ -197,12 +197,12 @@ const Signals = () => {
   // Mode
   const [mode, setMode] = useState('single'); // 'single' | 'batch'
 
-  // Single mode � POST /signals/extract body fields
+  // Single mode - POST /signals/extract body fields
   const [transcript, setTranscript] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [saveToDb, setSaveToDb] = useState(true);
 
-  // Batch mode � POST /signals/batch body: { transcripts: [{text, company_name}] }
+  // Batch mode - POST /signals/batch body: { transcripts: [{text, company_name}] }
   const [batchEntries, setBatchEntries] = useState([
     { company_name: '', text: '' },
   ]);
@@ -464,7 +464,7 @@ const Signals = () => {
           <p className="text-white-500 text-sm mt-1 font-bold uppercase tracking-widest">Institutional Forex Alpha From Earnings Transcripts</p>
         </div>
 
-        {/* Stats � SignalStatisticsResponse */}
+        {/* Stats - SignalStatisticsResponse */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/[0.02] border border-white/5 p-4 rounded-3xl">
           <div className="text-center px-3">
             <div className="text-[9px] font-black text-white-600 uppercase tracking-tighter mb-1">Total</div>
@@ -825,7 +825,7 @@ const Signals = () => {
               </span>
             </div>
 
-            {/* Filter by primary_direction � LONG / SHORT / NEUTRAL from DB */}
+            {/* Filter by primary_direction - LONG / SHORT / NEUTRAL from DB */}
             <div className="flex items-center gap-2">
               <FiFilter size={12} className="text-white-600" />
               <select
@@ -922,4 +922,6 @@ const Signals = () => {
 };
 
 export default Signals;
+
+
 

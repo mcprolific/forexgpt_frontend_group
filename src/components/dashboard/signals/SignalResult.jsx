@@ -75,8 +75,11 @@ const ConfidenceRing = ({ pct = 0 }) => {
           strokeLinecap="round"
         />
       </svg>
-      <div className="absolute text-[10px] font-black text-yellow-400">
-        {value}%
+      <div className="absolute flex flex-col items-center leading-none">
+        <span className="text-[16px] font-black text-yellow-400">{value}%</span>
+        <span className="mt-0.5 text-[8px] font-black text-white uppercase tracking-widest">
+          CONF
+        </span>
       </div>
     </div>
   );
@@ -149,7 +152,22 @@ const SignalResult = ({ signal, user }) => {
 
       <div className="relative z-10 p-6 md:p-8 pb-10 space-y-6 flex flex-col">
 
-        {/* ── Top row: pair + direction badge + confidence ── */}
+        {/* -- Transcript block (top) -- */}
+        {transcriptText && (
+          <div className="rounded-2xl bg-black/30 border border-white/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                Transcript Used
+              </span>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {transcriptText}
+            </p>
+          </div>
+        )}
+
+        {/* -- Top row: pair + direction badge + confidence -- */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             {/* Company */}
@@ -165,7 +183,7 @@ const SignalResult = ({ signal, user }) => {
               )}
             </div>
 
-            {/* Currency pair — hero text */}
+            {/* Currency pair - hero text */}
             <div className="text-3xl md:text-4xl font-black text-white tracking-tight leading-none mb-2">
               {data.pair}
             </div>
@@ -184,7 +202,7 @@ const SignalResult = ({ signal, user }) => {
           <ConfidenceRing pct={data.confidence} />
         </div>
 
-        {/* ── Metadata chips ── */}
+        {/* -- Metadata chips -- */}
         <div className="flex flex-wrap gap-2">
           {data.magnitude && <Tag label="Magnitude" value={data.magnitude} />}
           {data.horizon && <Tag label="Horizon" value={data.horizon} />}
@@ -192,7 +210,8 @@ const SignalResult = ({ signal, user }) => {
           <Tag label="Time" value={new Date(data.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
         </div>
 
-        {/* ── Reasoning block ── */}
+
+        {/* -- Reasoning block -- */}
         <div className="rounded-2xl bg-black/30 border border-white/5 p-4">
           <div className="flex items-center gap-2 mb-3">
             <div className={`h-1.5 w-1.5 rounded-full ${dir.dot}`} />
@@ -205,7 +224,7 @@ const SignalResult = ({ signal, user }) => {
           </p>
         </div>
 
-        {/* ── Meta footer ── */}
+        {/* -- Meta footer -- */}
         <div className="flex flex-wrap items-center gap-3 text-[9px] text-gray-600 font-bold uppercase tracking-widest">
           <span>ID: {String(data.id).slice(0, 8)}...</span>
           <span className="text-white/10">|</span>
@@ -214,20 +233,7 @@ const SignalResult = ({ signal, user }) => {
           <span>User: {String(data.userId || 'N/A').slice(0, 8)}...</span>
         </div>
 
-        {/* ── Action buttons ── */}
-        {transcriptText && (
-          <div className="rounded-2xl bg-black/30 border border-white/5 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                Transcript Used
-              </span>
-            </div>
-            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-              {transcriptText}
-            </p>
-          </div>
-        )}
+        {/* -- Action buttons -- */}
 
         <div className="flex flex-wrap gap-3 pt-2 border-t border-white/5">
           <button
@@ -251,3 +257,5 @@ const SignalResult = ({ signal, user }) => {
 };
 
 export default SignalResult;
+
+
