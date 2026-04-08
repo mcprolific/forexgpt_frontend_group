@@ -156,15 +156,18 @@ const BacktestResults = ({
     // Prepare chart-ready data
     const chartData = React.useMemo(() => {
         if (!result?.equity_curve) return [];
-        return result.equity_curve.map(d => ({
-            time: new Date(d.date).getTime() / 1000,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-            // Fall back robustly through possible equity field names
-            value: Number(d.total_equity ?? d.equity ?? d.capital ?? 10000)
-        })).sort((a, b) => a.time - b.time);
+        return result.equity_curve.map(d => {
+            const eq = Number(d.total_equity ?? d.equity ?? d.capital ?? 10000);
+            return {
+                time: new Date(d.date).getTime() / 1000,
+                // Robust Fallback: uses equity balance if candle data is missing
+                open: Number(d.open ?? eq),
+                high: Number(d.high ?? eq),
+                low: Number(d.low ?? eq),
+                close: Number(d.close ?? eq),
+                value: eq
+            };
+        }).sort((a, b) => a.time - b.time);
     }, [result?.equity_curve]);
 
     const equityLineData = React.useMemo(() =>
@@ -636,10 +639,33 @@ const BacktestResults = ({
                     </IntelligenceBlock>
 
                     <div className="p-6 rounded-3xl border border-yellow-500/10 bg-yellow-500/[0.02] text-center">
-                        <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] mb-4">Observations</h4>
+                        <h4 className="text-[10px] font-black text-white uppercase tracking-[0.3em] mb-4">Neural Observations</h4>
                         <ul className="space-y-3 text-[10px] leading-relaxed text-white/40 list-none">
-                            <li>The strategy {m.total_pnl >= 0 ? 'gained' : 'lost'} money overall: {money(m.initial_capital)} → {money(m.final_capital)}</li>
-                            <li>{m.total_trades === 0 ? 'NO TRADES WERE TAKEN.' : `${m.total_trades} trades executed.`}</li>
+                            <li className="flex items-start gap-2 justify-center">
+                                <span className="text-yellow-500/50">•</span>
+                                <span>The strategy {m.total_pnl >= 0 ? 'gained' : 'lost'} money overall: {money(m.initial_capital)} → {money(m.final_capital)}</span>
+                            </li>
+                            <li className="flex items-start gap-2 justify-center">
+                                <span className="text-yellow-500/50">•</span>
+                                <span>{m.total_trades === 0 ? 'NO TRADES WERE TAKEN.' : `${m.total_trades} trades executed with a ${perc(m.win_rate_pct)} hit rate.`}</span>
+                            </li>
+                            {m.total_trades > 0 && (
+                                <>
+                                    <li className="flex items-start gap-2 justify-center">
+                                        <span className="text-yellow-500/50">•</span>
+                                        <span>Max Drawdown of {perc(m.max_drawdown_pct)} indicates {Math.abs(m.max_drawdown_pct) > 20 ? 'high risk' : 'stable risk'} profile.</span>
+                                    </li>
+                                    <li className="flex items-start gap-2 justify-center">
+                                        <span className="text-yellow-500/50">•</span>
+                                        <span>Profit Factor of {fmt(m.profit_factor)} suggests {m.profit_factor > 1.5 ? 'strong' : m.profit_factor > 1.0 ? 'moderate' : 'weak'} edge.</span>
+                                    </li>
+                                </>
+                            )}
+                            {m.total_trades === 0 && (
+                                <li className="text-orange-400 font-bold uppercase mt-2">
+                                    Check your entry logic — triggers may be too restrictive.
+                                </li>
+                            )}
                         </ul>
                     </div>
 

@@ -137,11 +137,13 @@ const BacktestForm = () => {
                 const customPayload = {
                     user_id: String(userId),
                     custom_code: customCode,
-                    currency_pair: form.pair,
+                    pair: form.pair,
                     start_date: form.start_date,
                     end_date: form.end_date,
-                    capital: Number(form.initial_capital),
-                    position_size: Number(form.position_size_pct * form.initial_capital)
+                    timeframe: form.timeframe,
+                    initial_capital: Number(form.initial_capital),
+                    position_size_pct: Number(form.position_size_pct),
+                    data_source: form.data_source
                 };
                 result = await runCustomBacktest(customPayload);
             } else {
