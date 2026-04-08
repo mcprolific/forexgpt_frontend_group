@@ -34,6 +34,14 @@ const writeCache = (key, value) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
+const sanitizeSignalText = (value) => {
+  if (value == null) return "";
+
+  return String(value)
+    .replace(/\uFFFD/g, "")
+    .trim();
+};
+
 const normalizeSignal = (item) => {
   if (!item || typeof item !== "object") return null;
 
@@ -44,13 +52,15 @@ const normalizeSignal = (item) => {
     ...item,
     signal_id,
     id: item.id || signal_id,
-    direction: item.direction || item.primary_direction || "NEUTRAL",
-    company_name: item.company_name || item.source_label || "Signal Extract",
+    direction:
+      sanitizeSignalText(item.direction || item.primary_direction) || "NEUTRAL",
+    company_name:
+      sanitizeSignalText(item.company_name || item.source_label) ||
+      "Signal Extract",
     currency_pair:
-      item.currency_pair ||
-      item.affected_pairs?.[0] ||
-      item.base_currency ||
-      null,
+      sanitizeSignalText(
+        item.currency_pair || item.affected_pairs?.[0] || item.base_currency
+      ) || null,
     created_at: item.created_at || item.timestamp || new Date().toISOString(),
   };
 };
