@@ -44,7 +44,7 @@ const BacktestForm = () => {
         strategy_id: '',
         start_date: '2021-01-01',
         end_date: '2023-12-29',
-        timeframe: '1D',
+        timeframe: '1d',
         initial_capital: 10000,
         // RSI (bollinger_bands value)
         period: 14,
@@ -310,15 +310,8 @@ const BacktestForm = () => {
                             onChange={e => set('timeframe', e.target.value)}
                             className={selectCls}
                         >
-                            <option value="1m">1 Minutes</option>
-                            <option value="5m">5 Minutes</option>
-                            <option value="15m">15 Minutes</option>
-                            <option value="30m">30 Minutes</option>
-                            <option value="1h">1 Hour</option>
-                            <option value="4h">4 Hours</option>
-                            <option value="1d">Daily</option>
-                            <option value="1w">Weekly</option>
-                            <option value="1mn">Monthly</option>
+                            <option value="1d">Daily (1D)</option>
+                            <option value="1wk">Weekly (1W)</option>
                         </select>
                     </div>
                 </div>

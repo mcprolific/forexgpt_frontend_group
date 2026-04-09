@@ -1,7 +1,7 @@
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "framer-motion";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiTrash2, FiDownload, FiActivity } from 'react-icons/fi';
+import { FiTrash2, FiDownload, FiActivity, FiCode, FiEdit3 } from 'react-icons/fi';
 import { getBacktestTrades } from '../../../services/backtestService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CandlestickChart from './CandlestickChart';
@@ -81,6 +81,175 @@ const IntelligenceBlock = ({ title, children, delay = 0 }) => (
     </div>
 );
 
+const StaticMetricCard = ({ label, value, sublabel = null, note = null, valueClassName = 'text-white' }) => (
+    <div className="relative group cursor-default text-center">
+        <div className={`text-2xl font-black tabular-nums transition-colors duration-500 ${valueClassName}`}>
+            {value}
+        </div>
+        {sublabel ? (
+            <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-white/40">
+                {sublabel}
+            </div>
+        ) : null}
+        <div className="text-[10px] font-black text-white/30 uppercase mt-1 tracking-widest">
+            {label}
+        </div>
+        {note ? (
+            <div className="mt-1 text-[10px] text-white/35">
+                {note}
+            </div>
+        ) : null}
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-[1px] bg-yellow-500/20 group-hover:w-12 transition-all duration-700" />
+    </div>
+);
+
+const toNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseMaybeJson = (value) => {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    if (typeof value !== 'string') return null;
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+};
+
+const normalizeStrategyKey = (strategyName) => {
+    const normalized = String(strategyName || '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '_');
+
+    if (normalized === 'sma' || normalized === 'sma_cross') return 'moving_average_crossover';
+    if (normalized === 'bollinger') return 'bollinger_bands';
+
+    return normalized;
+};
+
+const getStrategyLogic = (strategyName, params = {}) => {
+    const name = normalizeStrategyKey(strategyName);
+
+    if (name === 'rsi') {
+        return {
+            title: 'RSI - Relative Strength Index',
+            rules: [
+                {
+                    signal: 'BUY',
+                    condition: `RSI drops below ${params?.oversold || 30}`,
+                    explanation: 'Market is oversold, so price may reverse upward.',
+                },
+                {
+                    signal: 'SELL',
+                    condition: `RSI rises above ${params?.overbought || 70}`,
+                    explanation: 'Market is overbought, so price may reverse downward.',
+                },
+            ],
+            parameters: [
+                `RSI Period: ${params?.period || 14} days`,
+                `Oversold threshold: ${params?.oversold || 30}`,
+                `Overbought threshold: ${params?.overbought || 70}`,
+            ],
+        };
+    }
+
+    if (name === 'moving_average_crossover') {
+        return {
+            title: 'Moving Average Crossover',
+            rules: [
+                {
+                    signal: 'BUY',
+                    condition: `${params?.fast_period || 50}-day MA crosses above ${params?.slow_period || 200}-day MA`,
+                    explanation: 'Short-term momentum is turning bullish and may start a trend.',
+                },
+                {
+                    signal: 'SELL',
+                    condition: `${params?.fast_period || 50}-day MA crosses below ${params?.slow_period || 200}-day MA`,
+                    explanation: 'Short-term momentum is turning bearish and may reverse the trend.',
+                },
+            ],
+            parameters: [
+                `Fast MA Period: ${params?.fast_period || 50} days`,
+                `Slow MA Period: ${params?.slow_period || 200} days`,
+            ],
+        };
+    }
+
+    if (name === 'bollinger_bands') {
+        return {
+            title: 'Bollinger Bands',
+            rules: [
+                {
+                    signal: 'BUY',
+                    condition: 'Price touches or crosses below the lower band',
+                    explanation: 'Price looks statistically cheap, so mean reversion upward is expected.',
+                },
+                {
+                    signal: 'SELL',
+                    condition: 'Price touches or crosses above the upper band',
+                    explanation: 'Price looks statistically expensive, so mean reversion downward is expected.',
+                },
+            ],
+            parameters: [
+                `Period: ${params?.period || 20} days`,
+                `Standard deviations: ${params?.std_dev || 2.0}`,
+            ],
+        };
+    }
+
+    if (name === 'macd') {
+        return {
+            title: 'MACD - Moving Average Convergence Divergence',
+            rules: [
+                {
+                    signal: 'BUY',
+                    condition: 'MACD line crosses above the signal line',
+                    explanation: 'Bullish momentum is building and an upward move may follow.',
+                },
+                {
+                    signal: 'SELL',
+                    condition: 'MACD line crosses below the signal line',
+                    explanation: 'Bearish momentum is building and a downward move may follow.',
+                },
+            ],
+            parameters: [
+                `Fast EMA: ${params?.fast || 12} days`,
+                `Slow EMA: ${params?.slow || 26} days`,
+                `Signal line: ${params?.signal || params?.macd_signal || 9} days`,
+            ],
+        };
+    }
+
+    return null;
+};
+
+const formatTradeDate = (value) => {
+    if (!value) return '-';
+
+    const raw = String(value).replace(' ', 'T');
+    const normalized = raw.includes('Z') || raw.includes('+') ? raw : `${raw}Z`;
+    const parsed = new Date(normalized);
+
+    if (Number.isNaN(parsed.getTime())) return '-';
+    return parsed.toLocaleDateString();
+};
+
+const getTradeDirection = (trade = {}) => {
+    const raw = String(trade.side || trade.direction || '').toLowerCase();
+    if (raw === 'buy' || raw === 'long') {
+        return { label: 'BUY', color: '#4ade80' };
+    }
+    if (raw === 'sell' || raw === 'short') {
+        return { label: 'SELL', color: '#f87171' };
+    }
+    return { label: '-', color: '#a3a3a3' };
+};
+
 const BacktestResults = ({
     result,
     onDelete,
@@ -97,11 +266,25 @@ const BacktestResults = ({
 
     const [trades, setTrades] = useState([]);
     const [tradesLoading, setTradesLoading] = useState(false);
+    const [showTrades, setShowTrades] = useState(false);
+    const [showCode, setShowCode] = useState(false);
 
-    const customCode = location.state?.customCode;
+    const customCode =
+        location.state?.customCode ||
+        location.state?.strategyCode ||
+        result?.custom_code ||
+        result?.strategy_code ||
+        '';
 
     const results = result;
     const selectedStrategy = result?.strategy_name || 'custom';
+    const strategyParams =
+        parseMaybeJson(result?.strategy_params) ||
+        parseMaybeJson(result?.parameters) ||
+        parseMaybeJson(result?.config?.strategy_params) ||
+        parseMaybeJson(result?.metrics?.strategy_params) ||
+        location.state?.strategyParams ||
+        {};
 
     const handleUnderstandWhy = () => {
         if (onAnalyze) {
@@ -141,6 +324,19 @@ const BacktestResults = ({
 
     const handleTestAgain = () => {
         navigate('/dashboard/backtest/new');
+    };
+
+    const handleEditInCodeGen = () => {
+        if (!customCode) return;
+
+        navigate('/dashboard/codegen/session/new', {
+            state: {
+                mode: 'improve',
+                originalCode: customCode,
+                backtestResults: result?.metrics || {},
+                fromBacktest: true,
+            }
+        });
     };
 
     const initialCapital = React.useMemo(() =>
@@ -305,11 +501,13 @@ const BacktestResults = ({
     };
 
     useEffect(() => {
-        if (result?.id && user?.user_id) {
+        const userId = user?.user_id || user?.id;
+
+        if (result?.id && userId) {
             const fetchTrades = async () => {
                 setTradesLoading(true);
                 try {
-                    const data = await getBacktestTrades(user.user_id || user.id, result.id);
+                    const data = await getBacktestTrades(userId, result.id);
                     // Critical Fix: Backend returns a direct array, not { trades: [] }
                     const actualTrades = Array.isArray(data) ? data : (data?.trades || []);
                     setTrades(actualTrades);
@@ -417,7 +615,28 @@ const BacktestResults = ({
     if (!result) return null;
 
     const m = rollingMetrics; // Use our reactive metrics object
-    const equity = result.equity_curve || [];
+    const totalTrades = toNumber(m.total_trades) ?? toNumber(result?.total_trades) ?? 0;
+    const hasTrades = totalTrades > 0;
+    const winningTrades = toNumber(m.winning_trades) ?? 0;
+    const losingTrades = toNumber(m.losing_trades) ?? 0;
+    const avgWin = toNumber(m.avg_win);
+    const avgLoss = toNumber(m.avg_loss);
+    const cagrPct = toNumber(m.cagr_pct);
+    const calmarRatio = toNumber(m.calmar_ratio);
+    const netProfitUSD = (toNumber(m.final_capital) ?? initialCapital) - (toNumber(m.initial_capital) ?? initialCapital);
+    const displayExpectancy = hasTrades ? expectancy : null;
+    const avgTradePnl = hasTrades ? netProfitUSD / totalTrades : null;
+    const avgWinLossNearParity =
+        hasTrades &&
+        avgWin != null &&
+        avgLoss != null &&
+        Math.abs(avgWin) > 0 &&
+        Math.abs(avgLoss) > 0 &&
+        Math.abs(avgWin) < Math.abs(avgLoss) * 1.1 &&
+        Math.abs(avgWin) > Math.abs(avgLoss) * 0.9;
+    const strategyLogic = selectedStrategy !== 'custom'
+        ? getStrategyLogic(selectedStrategy, strategyParams)
+        : null;
     const showUnderstandWhy = performanceVerdict === 'critical' || performanceVerdict === 'poor';
     const showNeedsImprovement = performanceVerdict === 'acceptable';
     const showDownloadAction = performanceVerdict === 'good' && (canDownloadCode || Boolean(customCode));
@@ -473,9 +692,23 @@ const BacktestResults = ({
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 w-full max-w-5xl">
-                        <AnimatedValue label="Net Profit" value={m.total_pnl} prefix="$" isNegative={m.total_pnl < 0} isComplete={isComplete} />
+                        <StaticMetricCard
+                            label="Net Profit"
+                            value={`${netProfitUSD >= 0 ? '+' : ''}${money(netProfitUSD)}`}
+                            sublabel={`${toNumber(m.total_return_pct) >= 0 ? '+' : ''}${perc(m.total_return_pct)}`}
+                            valueClassName={netProfitUSD >= 0 ? 'text-green-400' : 'text-red-400'}
+                        />
                         <AnimatedValue label="Total Return" value={m.total_return_pct} suffix="%" isNegative={m.total_return_pct < 0} isComplete={isComplete} />
-                        <AnimatedValue label="Win Rate" value={m.win_rate_pct} suffix="%" isComplete={isComplete} />
+                        {hasTrades ? (
+                            <AnimatedValue label="Win Rate" value={m.win_rate_pct} suffix="%" isComplete={isComplete} />
+                        ) : (
+                            <StaticMetricCard
+                                label="Win Rate"
+                                value="-"
+                                note="No trades taken"
+                                valueClassName="text-white/35"
+                            />
+                        )}
                         <AnimatedValue
                             label="Max Drawdown"
                             value={m.max_drawdown_pct}
@@ -558,6 +791,17 @@ const BacktestResults = ({
                 </div>
             </div>
 
+            {!hasTrades && (
+                <div className="rounded-2xl border border-orange-500/25 bg-orange-500/5 px-6 py-5 text-center">
+                    <p className="text-sm font-bold text-orange-300">
+                        This strategy generated no trading signals in the selected period.
+                    </p>
+                    <p className="mt-2 text-xs text-white/45">
+                        Try extending the date range or adjusting the strategy parameters before rerunning the backtest.
+                    </p>
+                </div>
+            )}
+
             {/* --- Core Content Grid --- */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -595,6 +839,49 @@ const BacktestResults = ({
                                 </div>
                             ))}
                         </div>
+                        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">Net Profit</span>
+                                <span className={`text-xs font-black ${netProfitUSD >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {`${netProfitUSD >= 0 ? '+' : ''}${money(netProfitUSD)}`} ({`${toNumber(m.total_return_pct) >= 0 ? '+' : ''}${perc(m.total_return_pct)}`})
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">Win / Loss</span>
+                                <span className={`text-xs font-black ${hasTrades ? 'text-white' : 'text-white/35'}`}>
+                                    {hasTrades ? `${winningTrades}W / ${losingTrades}L` : '-'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">Avg Win</span>
+                                <span className={`text-xs font-black ${hasTrades && avgWin != null ? 'text-green-500' : 'text-white/35'}`}>
+                                    {hasTrades && avgWin != null ? `+${money(avgWin)}` : '-'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">Avg Loss</span>
+                                <span className={`text-xs font-black ${hasTrades && avgLoss != null ? 'text-red-500' : 'text-white/35'}`}>
+                                    {hasTrades && avgLoss != null ? money(avgLoss) : '-'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">CAGR</span>
+                                <span className={`text-xs font-black ${cagrPct == null ? 'text-white/35' : cagrPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {cagrPct != null ? `${cagrPct >= 0 ? '+' : ''}${perc(cagrPct)}` : '-'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end border-b border-white/5 pb-1 hover:border-white/10 transition-colors">
+                                <span className="text-[10px] text-white/30 uppercase font-black">Calmar Ratio</span>
+                                <span className={`text-xs font-black ${calmarRatio == null || !hasTrades ? 'text-white/35' : calmarRatio >= 1 ? 'text-green-500' : calmarRatio >= 0.5 ? 'text-yellow-400' : 'text-red-500'}`}>
+                                    {calmarRatio != null && hasTrades ? fmt(calmarRatio, 4) : '-'}
+                                </span>
+                            </div>
+                        </div>
+                        {avgWinLossNearParity && (
+                            <div className="mt-4 rounded-xl border border-orange-500/15 bg-orange-500/5 px-4 py-3 text-[11px] italic text-orange-300">
+                                Avg win is nearly equal to avg loss, so win rate alone will not rescue this strategy.
+                            </div>
+                        )}
                     </IntelligenceBlock>
                 </div>
 
@@ -614,6 +901,73 @@ const BacktestResults = ({
                                     <div className="flex justify-between"><span>Capital</span><span className="text-white">{money(m.initial_capital)}</span></div>
                                 </div>
                             </div>
+                            {strategyLogic && (
+                                <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                                    <span className="text-[9px] text-white/20 block mb-3 uppercase font-black text-center">Strategy Logic</span>
+                                    <div className="text-[11px] text-white/75 text-center mb-3">
+                                        {strategyLogic.title}
+                                    </div>
+                                    <div className="space-y-3">
+                                        {strategyLogic.rules.map((rule) => (
+                                            <div
+                                                key={`${rule.signal}-${rule.condition}`}
+                                                className="rounded-xl bg-[#111] px-3 py-3 border-l-2"
+                                                style={{ borderLeftColor: rule.signal === 'BUY' ? '#4ade80' : '#f87171' }}
+                                            >
+                                                <div className={`text-[10px] font-black tracking-[0.2em] ${rule.signal === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {rule.signal}
+                                                </div>
+                                                <div className="mt-1 text-[11px] text-white">
+                                                    {rule.condition}
+                                                </div>
+                                                <div className="mt-1 text-[10px] italic text-white/45">
+                                                    {rule.explanation}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-3 space-y-1 text-[10px] text-white/35">
+                                        {strategyLogic.parameters.map((parameter) => (
+                                            <div key={parameter}>{parameter}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {selectedStrategy === 'custom' && customCode && (
+                                <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <span className="text-[9px] text-white/20 uppercase font-black tracking-[0.2em]">Strategy Code</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCode((current) => !current)}
+                                            className="text-[10px] font-black uppercase tracking-[0.15em] text-yellow-400 hover:text-white transition-colors"
+                                        >
+                                            {showCode ? 'Hide Code' : 'View Code'}
+                                        </button>
+                                    </div>
+                                    {showCode && (
+                                        <>
+                                            <div className="mb-2 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+                                                <FiCode className="h-3.5 w-3.5" />
+                                                Read Only
+                                            </div>
+                                            <pre className="max-h-72 overflow-auto rounded-xl border border-white/10 bg-[#0d0d0d] px-4 py-4 text-[11px] leading-relaxed text-green-400"
+                                                style={{ userSelect: 'text', cursor: 'default', pointerEvents: 'none' }}
+                                            >
+                                                {customCode}
+                                            </pre>
+                                            <button
+                                                type="button"
+                                                onClick={handleEditInCodeGen}
+                                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-500/40 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-yellow-400 transition-all hover:bg-yellow-500 hover:text-black"
+                                            >
+                                                <FiEdit3 className="h-3.5 w-3.5" />
+                                                Edit In CodeGen
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </IntelligenceBlock>
 
@@ -674,9 +1028,9 @@ const BacktestResults = ({
                             <p className="text-[10px] text-white/50 leading-relaxed">
                                 {actionMessageByVerdict[performanceVerdict] || 'Use these actions to review, improve, or rerun this strategy.'}
                             </p>
-                            {expectancy != null && (
-                                <p className={`text-[10px] font-black uppercase tracking-widest ${expectancy < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                    Expectancy: {fmt(expectancy, 4)}
+                            {displayExpectancy != null && (
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${displayExpectancy < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                    Expectancy: {fmt(displayExpectancy, 4)}
                                 </p>
                             )}
                             <div className="grid grid-cols-1 gap-3">
@@ -736,6 +1090,80 @@ const BacktestResults = ({
                     </div>
                 </div>
             </div>
+
+            {hasTrades && (
+                <IntelligenceBlock title="Trade Log" delay={0.5}>
+                    <button
+                        type="button"
+                        onClick={() => setShowTrades((current) => !current)}
+                        className="mb-4 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.2em] text-white/70 transition-all hover:border-yellow-500/30 hover:text-white"
+                    >
+                        {tradesLoading
+                            ? 'Loading trades...'
+                            : showTrades
+                                ? `Hide Trade Log (${totalTrades} trades)`
+                                : `View Trade Log (${totalTrades} trades)`}
+                    </button>
+
+                    {showTrades && trades.length > 0 && (
+                        <div className="overflow-x-auto rounded-2xl border border-white/5">
+                            <table className="min-w-[980px] w-full border-collapse text-left text-xs">
+                                <thead className="bg-white/[0.03]">
+                                    <tr className="border-b border-white/5">
+                                        {['#', 'Entry Date', 'Exit Date', 'Direction', 'Signal Reason', 'Entry Price', 'Exit Price', 'PnL'].map((header) => (
+                                            <th
+                                                key={header}
+                                                className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/35"
+                                            >
+                                                {header}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {trades.map((trade, index) => {
+                                        const pnl = toNumber(trade.net_pnl ?? trade.pnl_usd ?? trade.pnl ?? trade.profit) ?? 0;
+                                        const direction = getTradeDirection(trade);
+
+                                        return (
+                                            <tr
+                                                key={`${trade.trade_number || index}-${trade.entry_date || trade.entry_time || index}`}
+                                                className={index % 2 === 0 ? 'border-b border-white/[0.04]' : 'border-b border-white/[0.04] bg-white/[0.02]'}
+                                            >
+                                                <td className="px-4 py-3 text-white/35">{trade.trade_number || index + 1}</td>
+                                                <td className="px-4 py-3 text-white/70">{formatTradeDate(trade.entry_date || trade.entry_time)}</td>
+                                                <td className="px-4 py-3 text-white/70">{formatTradeDate(trade.exit_date || trade.exit_time)}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className="font-black tracking-[0.2em]" style={{ color: direction.color }}>
+                                                        {direction.label}
+                                                    </span>
+                                                </td>
+                                                <td className="max-w-[260px] px-4 py-3 text-white/45 italic">{trade.signal_reason || '-'}</td>
+                                                <td className="px-4 py-3 text-white/70">{toNumber(trade.entry_price) != null ? Number(trade.entry_price).toFixed(5) : '-'}</td>
+                                                <td className="px-4 py-3 text-white/70">{toNumber(trade.exit_price) != null ? Number(trade.exit_price).toFixed(5) : '-'}</td>
+                                                <td className={`px-4 py-3 font-black ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {pnl >= 0 ? '+' : ''}{pnl.toFixed(4)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            <div className="flex flex-wrap gap-6 border-t border-white/5 px-4 py-4 text-[11px] uppercase tracking-[0.18em] text-white/40">
+                                <span>Total: {totalTrades} trades</span>
+                                <span className="text-green-400">Won: {winningTrades}</span>
+                                <span className="text-red-400">Lost: {losingTrades}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {showTrades && !tradesLoading && trades.length === 0 && (
+                        <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-6 text-center text-sm text-white/35">
+                            No trade records were returned for this backtest.
+                        </div>
+                    )}
+                </IntelligenceBlock>
+            )}
         </div>
     );
 };
