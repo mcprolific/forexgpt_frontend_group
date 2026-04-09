@@ -24,11 +24,12 @@ const getWinRateRatio = (metrics = {}) => {
 };
 
 const calculateExpectancy = (metrics = {}) => {
+  const totalTrades = toNumber(metrics.total_trades) ?? 0;
   const winRate = getWinRateRatio(metrics);
   const avgWin = toNumber(metrics.avg_win);
   const avgLoss = toNumber(metrics.avg_loss);
 
-  if (winRate == null || avgWin == null || avgLoss == null) {
+  if (totalTrades <= 0 || winRate == null || avgWin == null || avgLoss == null) {
     return null;
   }
 

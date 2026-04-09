@@ -44,7 +44,7 @@ const BacktestForm = () => {
         strategy_id: '',
         start_date: '2021-01-01',
         end_date: '2023-12-29',
-        timeframe: '1D',
+        timeframe: '1d',
         initial_capital: 10000,
         // RSI (bollinger_bands value)
         period: 14,

@@ -6,6 +6,29 @@ const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   "http://127.0.0.1:8000";
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const splitFallbackText = (text) => {
+  if (!text) return [];
+
+  const words = text.match(/\S+\s*|\n+/g);
+  if (!words) return [text];
+
+  return words.flatMap((part) => {
+    if (part.length <= 20) return [part];
+    return part.match(/.{1,20}/g) || [part];
+  });
+};
+
+const emitFallbackStream = async (text, onChunk) => {
+  const parts = splitFallbackText(text);
+
+  for (const part of parts) {
+    onChunk(part);
+    await sleep(30);
+  }
+};
+
 const readTokenPair = () => {
   const access =
     localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -139,7 +162,7 @@ export async function streamMentorResponse({ question, conversationId, userId, o
       if (data?.conversation_id && onConversationId) {
         onConversationId(data.conversation_id);
       }
-      onChunk(data?.response || data?.answer || "Ok.");
+      await emitFallbackStream(data?.response || data?.answer || "Ok.", onChunk);
       onDone();
       return;
     }
