@@ -78,6 +78,25 @@ const getAnalysisCacheKey = (userId, key) =>
 const getAnalysisInflightKey = (userId, key) =>
   `fgpt_mentor_backtest_inflight_${userId || 'anon'}_${key || 'unknown'}`;
 
+const STREAM_RENDER_INTERVAL_MS = 35;
+const STREAM_RENDER_MAX_PART_SIZE = 4;
+
+const splitRenderableStreamChunk = (chunk) => {
+  if (!chunk) return [];
+
+  const parts = chunk.match(/\S+\s*|\n+/g);
+  if (!parts) {
+    return chunk.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, 'g')) || [chunk];
+  }
+
+  return parts.flatMap((part) => {
+    if (part.length <= STREAM_RENDER_MAX_PART_SIZE) {
+      return [part];
+    }
+    return part.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, 'g')) || [part];
+  });
+};
+
 const parseStoredMessages = (raw) => {
   if (!raw) return [];
   try {
@@ -937,7 +956,7 @@ const MentorMessages = () => {
 
     const enqueueChunk = (chunk) => {
       if (!chunk) return;
-      const parts = chunk.match(/.{1,12}/g) || [chunk];
+      const parts = splitRenderableStreamChunk(chunk);
       streamQueueRef.current.push(...parts);
       if (!streamTimerRef.current) {
         streamTimerRef.current = setInterval(() => {
@@ -1014,7 +1033,7 @@ const MentorMessages = () => {
               }
             }
           }
-        }, 20);
+        }, STREAM_RENDER_INTERVAL_MS);
       }
     };
 
@@ -1191,7 +1210,7 @@ const MentorMessages = () => {
                 }
               }
             }
-          }, 20);
+          }, STREAM_RENDER_INTERVAL_MS);
         }
         finalizeIfIdle();
       },
