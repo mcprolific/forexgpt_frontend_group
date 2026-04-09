@@ -310,13 +310,9 @@ const BacktestForm = () => {
                             onChange={e => set('timeframe', e.target.value)}
                             className={selectCls}
                         >
-                            <option value="1m">1 Minutes</option>
-                            <option value="5m">5 Minutes</option>
-                            <option value="15m">15 Minutes</option>
-                            <option value="30m">30 Minutes</option>
-                            <option value="1h">1 Hour</option>
-                            <option value="4h">4 Hours</option>
                             <option value="1d">Daily</option>
+                            <option value="2d">2 Days</option>
+                            <option value="5d">5 Days</option>
                             <option value="1w">Weekly</option>
                             <option value="1mn">Monthly</option>
                         </select>
