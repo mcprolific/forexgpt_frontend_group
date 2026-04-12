@@ -34,6 +34,7 @@ const TranscriptPage        = lazy(() => import('./pages/TranscriptPage'));
 const StrategyLabPage       = lazy(() => import('./pages/StrategyLabPage'));
 const BacktestPage          = lazy(() => import('./pages/BacktestPage'));
 const MentorPage            = lazy(() => import('./pages/MentorPage'));
+const NotFoundPage         = lazy(() => import('./pages/NotFoundPage'));
 
 // ── Dashboard Pages (lazy) ────────────────────────────────────────────
 const Dashboard           = lazy(() => import('./pages/dashboard/Dashboard'));
@@ -308,8 +309,8 @@ function App() {
               </Route>
             </Route>
 
-            {/* Catch-all Redirect */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch-all Page */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </Router>
