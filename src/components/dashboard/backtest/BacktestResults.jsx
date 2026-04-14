@@ -638,7 +638,8 @@ const BacktestResults = ({
         ? getStrategyLogic(selectedStrategy, strategyParams)
         : null;
     const showUnderstandWhy = performanceVerdict === 'critical' || performanceVerdict === 'poor';
-    const showNeedsImprovement = performanceVerdict === 'acceptable';
+    const showNeedsImprovement =
+        performanceVerdict !== 'good' && Boolean(onNeedsImprovement || customCode);
     const showDownloadAction = performanceVerdict === 'good' && (canDownloadCode || Boolean(customCode));
     const actionTitleByVerdict = {
         critical: 'Critical Failure',

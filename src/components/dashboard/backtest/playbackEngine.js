@@ -2,6 +2,18 @@
  * Institutional-Grade Forex Playback Engine
  * Controls time, price interpolation, and execution latency.
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const parsePlaybackTimestamp = (value) => {
+    if (!value) return NaN;
+
+    const raw = String(value).replace(' ', 'T');
+    const normalized = raw.includes('Z') || /[+-]\d\d:\d\d$/.test(raw)
+        ? raw
+        : `${raw}Z`;
+    return new Date(normalized).getTime();
+};
+
 export class ForexPlaybackEngine {
     constructor(candlestickData, equityData, trades, options = {}) {
         this.candlestickData = candlestickData || [];
@@ -20,6 +32,7 @@ export class ForexPlaybackEngine {
         this.onTradeFill = null;
 
         this.timer = null;
+        this.lastTradeNotificationKey = null;
     }
 
     setSpeed(speed) {
@@ -48,6 +61,7 @@ export class ForexPlaybackEngine {
         if (nextPointer >= 0 && nextPointer < this.candlestickData.length) {
             this.pointer = nextPointer;
             this.emitCurrentState();
+            this.notifyTradeFills(this.pointer, 0);
         }
     }
 
@@ -71,12 +85,18 @@ export class ForexPlaybackEngine {
 
     processTicks() {
         const candle = this.candlestickData[this.pointer];
-        const equity = this.equityData[this.pointer];
+        const equity =
+            this.equityData[this.pointer] ||
+            this.equityData[this.equityData.length - 1] ||
+            { value: 10000 };
+
+        if (!candle) return;
 
         // --- Micro-Tick Interpolation ---
         // We simulate 6 internal ticks per candle for that "live" flow
         const steps = 6;
         const subDelay = (800 / this.speed) / (steps + 1);
+        const currentEquityValue = Number(equity?.value ?? equity?.equity ?? 10000);
 
         for (let i = 0; i < steps; i++) {
             const progress = (i + 1) / steps;
@@ -92,8 +112,10 @@ export class ForexPlaybackEngine {
             }
 
             // Sync Equity (Hydraulic glide)
-            const prevEquity = this.pointer > 0 ? this.equityData[this.pointer - 1]?.value : (this.equityData[0]?.value || 10000);
-            const subEquity = prevEquity + (equity.value - prevEquity) * progress;
+            const prevEquity = this.pointer > 0
+                ? Number(this.equityData[this.pointer - 1]?.value ?? this.equityData[0]?.value ?? 10000)
+                : Number(this.equityData[0]?.value ?? 10000);
+            const subEquity = prevEquity + (currentEquityValue - prevEquity) * progress;
 
             // Emit micro-tick
             setTimeout(() => {
@@ -113,34 +135,73 @@ export class ForexPlaybackEngine {
             if (!this.isPlaying) return;
             this.onTick?.({
                 candle,
-                equity: equity.value,
+                equity: currentEquityValue,
                 time: candle.time,
                 isInternal: false
             });
         }, steps * subDelay);
 
-        // Check for trade executions at this candle
+        this.notifyTradeFills(this.pointer, this.executionDelay / this.speed);
+    }
+
+    getTradesForPointer(pointer) {
+        const candle = this.candlestickData[pointer];
+        if (!candle) return [];
+
         const candleTimeMs = candle.time * 1000;
+        const previousCandle = this.candlestickData[pointer - 1];
+        const nextCandle = this.candlestickData[pointer + 1];
+        const previousTimeMs = previousCandle ? previousCandle.time * 1000 : candleTimeMs - DAY_MS;
+        const fallbackIntervalMs = Math.max(
+            (nextCandle ? (nextCandle.time * 1000) - candleTimeMs : candleTimeMs - previousTimeMs) || DAY_MS,
+            1
+        );
+        const nextCandleTimeMs = nextCandle
+            ? nextCandle.time * 1000
+            : candleTimeMs + fallbackIntervalMs;
         const currentTrades = this.trades.filter(t => {
-            const entryTime = new Date(t.entry_date).getTime();
-            const exitTime = t.exit_date ? new Date(t.exit_date).getTime() : Infinity;
-            return entryTime === candleTimeMs || exitTime === candleTimeMs;
+            const entryTime = parsePlaybackTimestamp(t.entry_date || t.entry_time);
+            const exitTime = parsePlaybackTimestamp(t.exit_date || t.exit_time);
+
+            const entryMatches =
+                Number.isFinite(entryTime) &&
+                entryTime >= candleTimeMs &&
+                entryTime < nextCandleTimeMs;
+            const exitMatches =
+                Number.isFinite(exitTime) &&
+                exitTime >= candleTimeMs &&
+                exitTime < nextCandleTimeMs;
+
+            return entryMatches || exitMatches;
         });
+    }
+
+    notifyTradeFills(pointer, delayMs = 0) {
+        const currentTrades = this.getTradesForPointer(pointer);
 
         if (currentTrades.length > 0) {
+            const key = `${pointer}:${currentTrades
+                .map((trade) => trade.id || trade.trade_id || `${trade.entry_time || trade.entry_date}-${trade.exit_time || trade.exit_date}`)
+                .join(',')}`;
+            if (key === this.lastTradeNotificationKey) {
+                return;
+            }
+            this.lastTradeNotificationKey = key;
             setTimeout(() => {
                 this.onTradeFill?.(currentTrades);
-            }, this.executionDelay / this.speed);
+            }, Math.max(delayMs, 0));
         }
     }
 
     emitCurrentState() {
         const candle = this.candlestickData[this.pointer];
-        const equity = this.equityData[this.pointer];
+        const equity =
+            this.equityData[this.pointer] ||
+            this.equityData[this.equityData.length - 1];
         if (candle && equity) {
             this.onTick?.({
                 candle,
-                equity: equity.value,
+                equity: Number(equity?.value ?? equity?.equity ?? 10000),
                 time: candle.time,
                 isInternal: false
             });

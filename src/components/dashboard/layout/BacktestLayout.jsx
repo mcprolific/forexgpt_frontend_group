@@ -38,7 +38,7 @@ const BacktestLayout = () => {
         setBacktests([]);
         return;
       }
-      const data = await getBacktestResults(userId, 20, 0);
+      const data = await getBacktestResults(userId, 200, 0);
       setBacktests(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);

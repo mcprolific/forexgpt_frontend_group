@@ -10,6 +10,8 @@ import {
 } from "react-icons/fi";
 import { useAuth } from "../../contexts/AuthContext";
 import { getBacktestResults } from "../../services/backtestService";
+import { getConversations as getCodegenConversations } from "../../services/codeGenService";
+import { getConversations as getMentorConversations } from "../../services/mentorService";
 import { getUserSignals } from "../../services/signalService";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { formatLongDateTime } from "../../utils/formatters";
@@ -33,9 +35,11 @@ const HistoryPage = () => {
       }
 
       try {
-        const [signals, backtests] = await Promise.all([
-          getUserSignals(userId),
-          getBacktestResults(userId),
+        const [signals, backtests, mentorConversations, codegenConversations] = await Promise.all([
+          getUserSignals(userId, 500),
+          getBacktestResults(userId, 500),
+          getMentorConversations(userId, 500),
+          getCodegenConversations(userId, 500),
         ]);
 
         const items = [
@@ -52,6 +56,20 @@ const HistoryPage = () => {
             date: backtest.created_at,
             status: "Completed",
             pair: backtest.pair || "FX",
+          })),
+          ...(Array.isArray(mentorConversations) ? mentorConversations : []).map((conversation) => ({
+            type: "Mentor",
+            name: conversation.preview || "Mentor Conversation",
+            date: conversation.updated_at || conversation.started_at || conversation.created_at,
+            status: "Archived",
+            pair: "AI",
+          })),
+          ...(Array.isArray(codegenConversations) ? codegenConversations : []).map((conversation) => ({
+            type: "CodeGen",
+            name: conversation.description || "Logic Session",
+            date: conversation.updated_at || conversation.created_at || conversation.started_at,
+            status: "Archived",
+            pair: "AI",
           })),
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -79,7 +97,8 @@ const HistoryPage = () => {
   const filteredItems = historyItems.filter(
     (entry) =>
       entry.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.type.toLowerCase().includes(searchTerm.toLowerCase())
+      entry.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.pair.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (

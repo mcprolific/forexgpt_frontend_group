@@ -46,6 +46,13 @@ const normalizeConversation = (item) => {
     item.prompt ||
     "AI Conversation";
 
+  const activity_at =
+    item.updated_at ||
+    item.started_at ||
+    item.created_at ||
+    item.timestamp ||
+    new Date().toISOString();
+
   const started_at =
     item.started_at ||
     item.created_at ||
@@ -57,6 +64,7 @@ const normalizeConversation = (item) => {
     ...item,
     conversation_id,
     preview,
+    activity_at,
     started_at,
     message_count:
       item.message_count ||
@@ -87,8 +95,8 @@ const mergeConversationLists = (...lists) => {
     });
 
   return Array.from(merged.values()).sort((a, b) => {
-    const first = new Date(b.started_at || 0).getTime();
-    const second = new Date(a.started_at || 0).getTime();
+    const first = new Date(b.activity_at || b.updated_at || b.started_at || 0).getTime();
+    const second = new Date(a.activity_at || a.updated_at || a.started_at || 0).getTime();
     return first - second;
   });
 };
@@ -110,6 +118,7 @@ const normalizeHistory = (payload) => {
   if (Array.isArray(payload?.history)) return payload.history;
   if (Array.isArray(payload?.messages)) return payload.messages;
   if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
   return [];
 };
 
@@ -126,6 +135,174 @@ const filterHistoryForConversation = (history, conversationId) => {
   });
 
   return matching.length > 0 ? matching : history;
+};
+
+const pickFirstText = (...values) =>
+  values.find((value) => typeof value === "string" && value.trim()) || "";
+
+const normalizeSuggestionList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const buildSuggestionContent = (suggestions) => {
+  if (!suggestions.length) return "";
+  return `Improvement Suggestions\n\n${suggestions
+    .map((suggestion) => `- ${suggestion}`)
+    .join("\n")}`;
+};
+
+const normalizeRole = (item) => {
+  const rawRole = String(
+    item?.role ||
+      item?.sender ||
+      item?.source ||
+      item?.author ||
+      item?.message_role ||
+      ""
+  ).toLowerCase();
+
+  if (
+    rawRole.includes("user") ||
+    rawRole.includes("human") ||
+    rawRole.includes("client")
+  ) {
+    return "user";
+  }
+
+  if (
+    rawRole.includes("assistant") ||
+    rawRole.includes("mentor") ||
+    rawRole.includes("ai") ||
+    rawRole.includes("bot") ||
+    rawRole.includes("system")
+  ) {
+    return "assistant";
+  }
+
+  return null;
+};
+
+const buildHistoryMessage = (item, role, index, content) => {
+  const text =
+    typeof content === "string" ? content.trim() : String(content || "").trim();
+  if (!text) return null;
+
+  const timestamp =
+    item?.timestamp ||
+    item?.created_at ||
+    item?.updated_at ||
+    item?.started_at ||
+    new Date().toISOString();
+
+  return {
+    id:
+      item?.message_id ||
+      item?.id ||
+      `${role}-${index}-${timestamp}`,
+    role,
+    content: text,
+    conversation_id:
+      item?.conversation_id ||
+      item?.conversationId ||
+      item?.chat_id ||
+      item?.session_id ||
+      null,
+    code_id: item?.code_id || null,
+    strategy_name: item?.strategy_name || null,
+    strategy_config: item?.strategy_config || null,
+    educational_analysis:
+      item?.educational_analysis || item?.analysis || item?.explanation || null,
+    improvement_suggestions: normalizeSuggestionList(item?.improvement_suggestions),
+    timestamp,
+  };
+};
+
+const normalizeHistoryEntry = (item, index) => {
+  if (typeof item === "string") {
+    return [
+      buildHistoryMessage(
+        { timestamp: new Date().toISOString() },
+        "assistant",
+        index,
+        item
+      ),
+    ].filter(Boolean);
+  }
+
+  if (!item || typeof item !== "object") return [];
+
+  const normalizedRole = normalizeRole(item);
+  const directContent = pickFirstText(
+    item.content,
+    item.text,
+    item.message,
+    item.body
+  );
+
+  if (normalizedRole && directContent) {
+    return [
+      buildHistoryMessage(item, normalizedRole, index, directContent),
+    ].filter(Boolean);
+  }
+
+  const promptText = pickFirstText(
+    item.prompt,
+    item.question,
+    item.user_message,
+    item.request
+  );
+  const improvementSuggestions = normalizeSuggestionList(
+    item.improvement_suggestions
+  );
+  const responseText = pickFirstText(
+    item.response,
+    item.answer,
+    item.educational_analysis,
+    item.analysis,
+    item.explanation,
+    item.assistant_message,
+    item.mentor_response,
+    buildSuggestionContent(improvementSuggestions),
+    !normalizedRole ? item.content : ""
+  );
+
+  const messages = [];
+
+  if (promptText) {
+    messages.push(
+      buildHistoryMessage(item, "user", `${index}-user`, promptText)
+    );
+  }
+
+  if (responseText) {
+    messages.push(
+      buildHistoryMessage(item, "assistant", `${index}-assistant`, responseText)
+    );
+  }
+
+  return messages.filter(Boolean);
+};
+
+export const normalizeMentorMessageHistory = (payload) => {
+  const rawHistory = normalizeHistory(payload);
+  const dedupe = new Set();
+
+  return rawHistory.flatMap(normalizeHistoryEntry).filter((message) => {
+    const key = [message.role, message.timestamp, message.content].join("|");
+    if (dedupe.has(key)) return false;
+    dedupe.add(key);
+    return true;
+  });
 };
 
 // ==============================
@@ -180,12 +357,14 @@ export const askMentor = async (message, conversationId, userId) => {
 // ==============================
 // GET CONVERSATIONS
 // ==============================
-export const getConversations = async (userId) => {
+export const getConversations = async (userId, limit = 500) => {
   const cached = readCachedConversationList(userId);
 
   try {
     const candidates = [
+      `/mentor/conversations/${userId}?limit=${limit}`,
       `/mentor/conversations/${userId}`,
+      `/mentor/conversations?user_id=${userId}&limit=${limit}`,
       `/mentor/conversations?user_id=${userId}`,
       `/mentor/conversations?user_id=${userId}&limit=50`,
       `/mentor/history?user_id=${userId}`,
@@ -234,7 +413,7 @@ export const getConversationHistory = async (conversationId, userId) => {
       try {
         const res = await axiosInstance.get(url);
         const history = filterHistoryForConversation(
-          normalizeHistory(res.data?.history ?? res.data),
+          normalizeMentorMessageHistory(res.data?.history ?? res.data),
           conversationId
         );
 
@@ -250,10 +429,10 @@ export const getConversationHistory = async (conversationId, userId) => {
       }
     }
 
-    return { history: [] };
+    return { history: normalizeMentorMessageHistory([]) };
   } catch (error) {
     if (error?.response?.status === 404) {
-      return { history: [] };
+      return { history: normalizeMentorMessageHistory([]) };
     }
     console.error("Get History Error:", error);
     throw error;

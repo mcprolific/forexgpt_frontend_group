@@ -103,7 +103,7 @@ export const runCustomBacktest = async (payload) => {
   return res.data;
 };
 
-export const getBacktestResults = async (userId, limit = 20, offset = 0) => {
+export const getBacktestResults = async (userId, limit = 200, offset = 0) => {
   const cached = readCachedList(getBacktestListCacheKey(userId));
 
   try {

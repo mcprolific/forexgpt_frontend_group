@@ -191,7 +191,7 @@ export const batchExtract = async (transcripts, userId = null, saveToDb = true) 
 // GET /signals/user/{user_id}?limit=50&currency_pair=...&direction=...
 export const getUserSignals = async (
   userId,
-  limit = 50,
+  limit = 200,
   currencyPair = null,
   direction = null
 ) => {
