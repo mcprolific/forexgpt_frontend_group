@@ -29,6 +29,85 @@ const emitFallbackStream = async (text, onChunk) => {
   }
 };
 
+const extractTextCandidate = (value) => {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const next = extractTextCandidate(item);
+      if (next) return next;
+    }
+    return "";
+  }
+  if (!value || typeof value !== "object") return "";
+
+  const candidates = [
+    value?.choices?.[0]?.delta?.content,
+    value?.choices?.[0]?.message?.content,
+    value?.delta?.content,
+    value?.chunk,
+    value?.content,
+    value?.text,
+    value?.response,
+    value?.answer,
+    value?.analysis,
+    value?.explanation,
+    value?.message,
+    value?.data,
+    value?.payload,
+    value?.result,
+    value?.history?.[value?.history?.length - 1]?.response,
+    value?.history?.[value?.history?.length - 1]?.answer,
+    value?.history?.[value?.history?.length - 1]?.content,
+    value?.messages?.[value?.messages?.length - 1]?.content,
+  ];
+
+  for (const candidate of candidates) {
+    const next = extractTextCandidate(candidate);
+    if (next) return next;
+  }
+
+  return "";
+};
+
+const processSseFrame = (frame, { onChunk, onDone, onConversationId }) => {
+  for (const rawLine of frame.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith("data:")) continue;
+
+    const payload = line.slice(5).trim();
+    if (!payload) continue;
+
+    if (payload === "[DONE]") {
+      onDone();
+      return true;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      if (typeof parsed === "string") {
+        if (parsed) onChunk(parsed);
+        continue;
+      }
+
+      if (parsed?.error) {
+        throw new Error(parsed.error);
+      }
+
+      if (parsed?.conversation_id && onConversationId) {
+        onConversationId(parsed.conversation_id);
+      }
+
+      const chunk = extractTextCandidate(parsed);
+
+      if (chunk) onChunk(chunk);
+    } catch {
+      if (payload) onChunk(payload);
+    }
+  }
+
+  return false;
+};
+
 const readTokenPair = () => {
   const access =
     localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -89,7 +168,15 @@ const tryRefreshToken = async (refreshToken) => {
  * @param {function} opts.onError         - Called with an Error on failure
  * @param {function} [opts.onConversationId] - Called when a conversation id is discovered
  */
-export async function streamMentorResponse({ question, conversationId, userId, onChunk, onDone, onError, onConversationId }) {
+export async function streamMentorResponse({
+  question,
+  conversationId,
+  userId,
+  onChunk,
+  onDone,
+  onError,
+  onConversationId,
+}) {
   const { access, refresh } = readTokenPair();
   const headers = {
     "Content-Type": "application/json",
@@ -102,6 +189,27 @@ export async function streamMentorResponse({ question, conversationId, userId, o
     ...(conversationId ? { conversation_id: conversationId } : {}),
     ...(userId ? { user_id: userId } : {}),
   });
+  let streamedText = "";
+
+  const emitChunk = (chunk) => {
+    const nextChunk =
+      typeof chunk === "string" ? chunk : String(chunk || "");
+    if (!nextChunk) return;
+
+    if (streamedText && nextChunk.startsWith(streamedText)) {
+      const delta = nextChunk.slice(streamedText.length);
+      if (delta) onChunk(delta);
+      streamedText = nextChunk;
+      return;
+    }
+
+    if (nextChunk === streamedText || streamedText.endsWith(nextChunk)) {
+      return;
+    }
+
+    streamedText += nextChunk;
+    onChunk(nextChunk);
+  };
 
   const runStream = async (authToken) => {
     const nextHeaders = {
@@ -140,7 +248,7 @@ export async function streamMentorResponse({ question, conversationId, userId, o
       try {
         const nextToken = await tryRefreshToken(refresh);
         response = await runStream(nextToken);
-      } catch (refreshErr) {
+      } catch {
         // keep response as 401 for fallback handling below
       }
     }
@@ -162,7 +270,8 @@ export async function streamMentorResponse({ question, conversationId, userId, o
       if (data?.conversation_id && onConversationId) {
         onConversationId(data.conversation_id);
       }
-      await emitFallbackStream(data?.response || data?.answer || "Ok.", onChunk);
+      const fallbackText = extractTextCandidate(data) || "Ok.";
+      await emitFallbackStream(fallbackText, emitChunk);
       onDone();
       return;
     }
@@ -182,44 +291,26 @@ export async function streamMentorResponse({ question, conversationId, userId, o
 
       buffer += decoder.decode(value, { stream: true });
 
-      // SSE frames are separated by double newlines
-      const frames = buffer.split("\n\n");
-      buffer = frames.pop() ?? ""; // Keep last (possibly incomplete) frame
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() ?? "";
 
       for (const frame of frames) {
-        for (const line of frame.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
+        if (processSseFrame(frame, { onChunk: emitChunk, onDone, onConversationId })) {
+          return;
+        }
+      }
+    }
 
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") {
-            onDone();
-            return;
-          }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      const trailingFrames = buffer
+        .split(/\r?\n\r?\n/)
+        .map((frame) => frame.trim())
+        .filter(Boolean);
 
-          try {
-            const parsed = JSON.parse(payload);
-            if (typeof parsed === "string") {
-              // Our backend sends JSON-encoded plain strings
-              if (parsed) onChunk(parsed);
-            } else if (parsed?.error) {
-              throw new Error(parsed.error);
-            } else {
-              if (parsed?.conversation_id && onConversationId) {
-                onConversationId(parsed.conversation_id);
-              }
-              // OpenAI-compatible SSE fallback
-              const chunk =
-                parsed?.choices?.[0]?.delta?.content ??
-                parsed?.chunk ??
-                parsed?.content ??
-                parsed?.text ??
-                "";
-              if (chunk) onChunk(chunk);
-            }
-          } catch (jsonErr) {
-            // Not JSON — treat as raw plain-text chunk
-            if (payload) onChunk(payload);
-          }
+      for (const frame of trailingFrames) {
+        if (processSseFrame(frame, { onChunk: emitChunk, onDone, onConversationId })) {
+          return;
         }
       }
     }
@@ -229,5 +320,3 @@ export async function streamMentorResponse({ question, conversationId, userId, o
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
-
-

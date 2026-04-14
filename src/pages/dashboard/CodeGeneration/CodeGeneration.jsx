@@ -27,6 +27,7 @@ import {
   improveStrategy,
   getCodeGenHistoryCacheKey,
   getConversations,
+  normalizeCodeGenMessageHistory,
   updateGeneratedCode,
 } from "../../../services/codeGenService";
 import { formatLongDateTime } from "../../../utils/formatters";
@@ -48,15 +49,107 @@ const getDraftKey = (userId) => `fgpt_codegen_draft_${userId || "anon"}`;
 const getLastConversationKey = (userId) =>
   `fgpt_codegen_last_conversation_${userId || "anon"}`;
 
+const pickFirstText = (...values) =>
+  values.find((value) => typeof value === "string" && value.trim()) || "";
+
+const normalizeSuggestionList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const buildImprovementMentorContext = ({
+  mentorAnalysis,
+  improvementSuggestions,
+  strategyName,
+  strategyConfig,
+}) => {
+  const sections = [];
+
+  if (strategyName) {
+    sections.push(`Strategy Name: ${strategyName}`);
+  }
+
+  if (mentorAnalysis) {
+    sections.push(String(mentorAnalysis).trim());
+  }
+
+  if (improvementSuggestions.length > 0) {
+    sections.push(
+      `Improvement Suggestions:\n${improvementSuggestions
+        .map((suggestion) => `- ${suggestion}`)
+        .join("\n")}`
+    );
+  }
+
+  if (strategyConfig && typeof strategyConfig === "object") {
+    sections.push(`Strategy Config:\n${JSON.stringify(strategyConfig, null, 2)}`);
+  }
+
+  return sections.filter(Boolean).join("\n\n");
+};
+
+const getLatestPromptLikeMessage = (messages = []) =>
+  [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message?.role === "user" &&
+        message?.content?.trim() &&
+        !/^Improving strategy\b/i.test(message.content)
+    )?.content || "";
+
 const parseStoredMessages = (raw) => {
   if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeCodeGenMessageHistory(parsed);
   } catch {
     return [];
   }
+};
+
+const compactPromptText = (value, maxLength = 220) => {
+  if (!value) return "";
+
+  const cleaned = String(value)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, maxLength).replace(/\s+\S*$/, "")}...`;
+};
+
+const buildMentorPrompt = (state = {}) => {
+  if (state.strategyText) {
+    return compactPromptText(state.strategyText);
+  }
+
+  const strategyType = state.strategyType || "";
+  const rawContext = state.context || "";
+  const conciseContext = compactPromptText(rawContext);
+
+  if (strategyType && conciseContext) {
+    return `Create a ${strategyType} strategy based on: ${conciseContext}`;
+  }
+
+  if (strategyType) {
+    return `Create a ${strategyType} strategy.`;
+  }
+
+  return conciseContext;
 };
 
 const CodeGeneration = () => {
@@ -74,6 +167,10 @@ const CodeGeneration = () => {
   const [originalCode, setOriginalCode] = useState(null);
   const [backtestResults, setBacktestResults] = useState(null);
   const [mentorAnalysis, setMentorAnalysis] = useState(null);
+  const [improvementSuggestions, setImprovementSuggestions] = useState([]);
+  const [improvementStrategyName, setImprovementStrategyName] = useState("");
+  const [improvementStrategyConfig, setImprovementStrategyConfig] = useState(null);
+  const [sourceCodeId, setSourceCodeId] = useState(null);
   const [additionalRequirements, setAdditionalRequirements] = useState("");
   const [showOriginalCode, setShowOriginalCode] = useState(false);
   const [showBacktestSummary, setShowBacktestSummary] = useState(true);
@@ -83,41 +180,63 @@ const CodeGeneration = () => {
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const consumedStateKeyRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
 
   useEffect(() => {
     const state = location.state || {};
-    if (!Object.keys(state).length) return;
+    const shouldConsume =
+      state.fromMentor ||
+      (state.fromSignals && state.prefilledDescription) ||
+      state.mode === "improve";
+
+    if (!shouldConsume || consumedStateKeyRef.current === location.key) return;
+    consumedStateKeyRef.current = location.key;
 
     if (state.fromMentor) {
-      const strategyType = state.strategyType || '';
-      const context = state.context || state.strategyText || '';
-      const mentorPrompt = strategyType
-        ? `Create a ${strategyType} strategy${context ? ` based on: ${context}` : ''}`
-        : context
-          ? `Create a trading strategy based on: ${context}`
-          : '';
+      const mentorPrompt = buildMentorPrompt(state);
 
       if (mentorPrompt) {
-        setNewMessage(mentorPrompt);
+        setNewMessage((current) => current || mentorPrompt);
       }
     }
 
     if (state.fromSignals && state.prefilledDescription) {
-      setNewMessage(state.prefilledDescription);
+      setNewMessage((current) => current || state.prefilledDescription);
     }
 
     if (state.mode === "improve") {
       setImprovementMode(true);
       setOriginalCode(state.originalCode || null);
       setBacktestResults(state.backtestResults || null);
-      setMentorAnalysis(state.mentorAnalysis || null);
+      setMentorAnalysis(
+        pickFirstText(
+          state.mentorAnalysis,
+          state.educationalAnalysis,
+          state.analysis
+        ) || null
+      );
+      setImprovementSuggestions(
+        normalizeSuggestionList(state.improvementSuggestions)
+      );
+      setImprovementStrategyName(
+        state.strategyName || state.backtestResults?.strategy_name || ""
+      );
+      setImprovementStrategyConfig(state.strategyConfig || null);
+      setSourceCodeId(state.codeId || null);
+      setLatestStrategyDesc(
+        (current) =>
+          current ||
+          state.savedDescription ||
+          state.strategyName ||
+          "Improved Strategy"
+      );
     }
 
     // Clear consumed state so a page re-render doesn't re-trigger this effect
     navigate(location.pathname, { replace: true, state: null });
-  }, []);
+  }, [location.key, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -144,7 +263,7 @@ const CodeGeneration = () => {
       try {
         setErrorMessage("");
         const res = await getCodeConversationHistory(conversationId, userId);
-        const history = Array.isArray(res.history) ? res.history : [];
+        const history = normalizeCodeGenMessageHistory(res.history);
         const nextHistory = history.length > 0 ? history : cachedHistory;
         setMessages(nextHistory);
         localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
@@ -185,6 +304,13 @@ const CodeGeneration = () => {
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    const nextDescription = getLatestPromptLikeMessage(messages);
+    if (nextDescription) {
+      setLatestStrategyDesc(nextDescription);
     }
   }, [messages]);
 
@@ -259,8 +385,21 @@ const CodeGeneration = () => {
         const assistantMsg = {
           id: response.code_id || `${Date.now()}-assistant`,
           role: "assistant",
-          content: response.explanation,
+          content:
+            response.explanation ||
+            response.response ||
+            response.answer ||
+            response.analysis ||
+            (response.code ? "Strategy code generated successfully." : ""),
           code: response.code || null,
+          code_id: response.code_id || null,
+          strategy_name: response.strategy_name || null,
+          strategy_config: response.strategy_config || null,
+          educational_analysis:
+            response.educational_analysis || response.analysis || null,
+          improvement_suggestions: normalizeSuggestionList(
+            response.improvement_suggestions
+          ),
           timestamp: response.timestamp || new Date().toISOString(),
         };
 
@@ -273,12 +412,19 @@ const CodeGeneration = () => {
             replace: true,
             state: { skipFetch: true },
           });
-        } else if (conversationId && userId) {
-          localStorage.setItem(getLastConversationKey(userId), conversationId);
+        } else if (userId) {
+          localStorage.setItem(
+            getLastConversationKey(userId),
+            response.conversation_id
+          );
         }
 
         if (userId && response.conversation_id) {
           try {
+            const sessionDescription =
+              response.description ||
+              response.saved_description ||
+              userContent;
             const latest = await getConversations(userId);
             const exists = (latest || []).some(
               (item) => item?.conversation_id === response.conversation_id
@@ -286,7 +432,7 @@ const CodeGeneration = () => {
             if (!exists && response.code_id) {
               await updateGeneratedCode(response.code_id, userId, {
                 conversation_id: response.conversation_id,
-                description: userContent,
+                description: sessionDescription,
               });
               await getConversations(userId);
             }
@@ -345,11 +491,17 @@ const CodeGeneration = () => {
     setMessages((prev) => [...prev, userMsg]);
 
     try {
+      const mentorContext = buildImprovementMentorContext({
+        mentorAnalysis,
+        improvementSuggestions,
+        strategyName: improvementStrategyName,
+        strategyConfig: improvementStrategyConfig,
+      });
       const response = await improveStrategy(
         userId,
         originalCode,
         backtestResults || {},
-        mentorAnalysis || "",
+        mentorContext,
         additionalRequirements,
         conversationId === "new" ? null : conversationId
       );
@@ -358,8 +510,23 @@ const CodeGeneration = () => {
         const assistantMsg = {
           id: response.code_id || `${Date.now()}-improved`,
           role: "assistant",
-          content: response.explanation,
+          content:
+            response.explanation ||
+            response.response ||
+            response.answer ||
+            response.analysis ||
+            (response.code ? "Strategy improvement generated successfully." : ""),
           code: response.code || null,
+          code_id: response.code_id || null,
+          strategy_name:
+            response.strategy_name || improvementStrategyName || null,
+          strategy_config:
+            response.strategy_config || improvementStrategyConfig || null,
+          educational_analysis:
+            response.educational_analysis || response.analysis || mentorAnalysis || null,
+          improvement_suggestions: normalizeSuggestionList(
+            response.improvement_suggestions || improvementSuggestions
+          ),
           timestamp: response.timestamp || new Date().toISOString(),
           isImproved: true,
         };
@@ -387,6 +554,38 @@ const CodeGeneration = () => {
             replace: true,
             state: { skipFetch: true },
           });
+        } else if (userId && response.conversation_id) {
+          localStorage.setItem(
+            getLastConversationKey(userId),
+            response.conversation_id
+          );
+        }
+
+        if (userId && response.conversation_id) {
+          try {
+            const sessionDescription =
+              response.description ||
+              latestStrategyDesc ||
+              improvementStrategyName ||
+              additionalRequirements ||
+              "Improved Strategy";
+            const latest = await getConversations(userId);
+            const exists = (latest || []).some(
+              (item) => item?.conversation_id === response.conversation_id
+            );
+            if (!exists && response.code_id) {
+              await updateGeneratedCode(response.code_id, userId, {
+                conversation_id: response.conversation_id,
+                description: sessionDescription,
+              });
+              await getConversations(userId);
+            }
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("fgpt-codegen-history-updated"));
+            }
+          } catch (error) {
+            console.error("Failed to persist improved codegen history:", error);
+          }
         }
       }
     } catch (error) {
@@ -427,7 +626,7 @@ const CodeGeneration = () => {
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
           components={{
-            code({ node, inline, className, children, ...props }) {
+            code({ inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || "");
               return !inline && match ? (
                 <div className="rounded-lg overflow-hidden my-4 border border-white/10">
@@ -601,45 +800,80 @@ const CodeGeneration = () => {
             </button>
           </div>
 
-          {showBacktestSummary && backtestResults && (
+          {showBacktestSummary &&
+            (backtestResults ||
+              mentorAnalysis ||
+              improvementSuggestions.length > 0 ||
+              improvementStrategyConfig ||
+              improvementStrategyName ||
+              sourceCodeId) && (
             <div className="px-4 pb-3 border-t border-orange-500/20">
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-2 mb-1 font-bold">
-                Backtest Results
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: "Sharpe", value: formatSummaryMetric(backtestResults.sharpe_ratio) },
-                  {
-                    label: "Max DD",
-                    value: formatSummaryPercent(
-                      backtestResults.max_drawdown ?? backtestResults.max_drawdown_pct
-                    ),
-                  },
-                  {
-                    label: "Win Rate",
-                    value: formatSummaryPercent(
-                      backtestResults.win_rate ?? backtestResults.win_rate_pct
-                    ),
-                  },
-                  {
-                    label: "Return",
-                    value: formatSummaryPercent(
-                      backtestResults.total_return ?? backtestResults.total_return_pct
-                    ),
-                  },
-                  {
-                    label: "Expectancy",
-                    value: formatSummaryMetric(backtestResults.expectancy, 4),
-                  },
-                ].map((metric) => (
-                  <div key={metric.label} className="bg-black/30 rounded-lg p-2 text-center">
-                    <p className="text-[9px] text-gray-600 uppercase tracking-widest">
-                      {metric.label}
-                    </p>
-                    <p className="text-sm font-black text-orange-400">{metric.value}</p>
+              {(improvementStrategyName || sourceCodeId) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                  {improvementStrategyName && (
+                    <div className="bg-black/30 rounded-lg p-2">
+                      <p className="text-[9px] text-gray-600 uppercase tracking-widest">
+                        Strategy
+                      </p>
+                      <p className="text-sm font-black text-white">
+                        {improvementStrategyName}
+                      </p>
+                    </div>
+                  )}
+                  {sourceCodeId && (
+                    <div className="bg-black/30 rounded-lg p-2">
+                      <p className="text-[9px] text-gray-600 uppercase tracking-widest">
+                        Source Code ID
+                      </p>
+                      <p className="text-sm font-black text-white break-all">
+                        {sourceCodeId}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {backtestResults && (
+                <>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-2 mb-1 font-bold">
+                    Backtest Results
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: "Sharpe", value: formatSummaryMetric(backtestResults.sharpe_ratio) },
+                      {
+                        label: "Max DD",
+                        value: formatSummaryPercent(
+                          backtestResults.max_drawdown ?? backtestResults.max_drawdown_pct
+                        ),
+                      },
+                      {
+                        label: "Win Rate",
+                        value: formatSummaryPercent(
+                          backtestResults.win_rate ?? backtestResults.win_rate_pct
+                        ),
+                      },
+                      {
+                        label: "Return",
+                        value: formatSummaryPercent(
+                          backtestResults.total_return ?? backtestResults.total_return_pct
+                        ),
+                      },
+                      {
+                        label: "Expectancy",
+                        value: formatSummaryMetric(backtestResults.expectancy, 4),
+                      },
+                    ].map((metric) => (
+                      <div key={metric.label} className="bg-black/30 rounded-lg p-2 text-center">
+                        <p className="text-[9px] text-gray-600 uppercase tracking-widest">
+                          {metric.label}
+                        </p>
+                        <p className="text-sm font-black text-orange-400">{metric.value}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              )}
 
               {mentorAnalysis && (
                 <div className="mt-2 p-2 bg-black/30 rounded-lg">
@@ -649,6 +883,30 @@ const CodeGeneration = () => {
                   <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-3">
                     {mentorAnalysis}
                   </p>
+                </div>
+              )}
+
+              {improvementSuggestions.length > 0 && (
+                <div className="mt-2 p-2 bg-black/30 rounded-lg">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">
+                    Improvement Suggestions
+                  </p>
+                  <ul className="space-y-1 text-[11px] text-gray-300 list-disc list-inside">
+                    {improvementSuggestions.map((suggestion) => (
+                      <li key={suggestion}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {improvementStrategyConfig && (
+                <div className="mt-2 p-2 bg-black/30 rounded-lg">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">
+                    Strategy Config
+                  </p>
+                  <pre className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(improvementStrategyConfig, null, 2)}
+                  </pre>
                 </div>
               )}
 

@@ -155,13 +155,13 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       try {
         let data = [];
         if (historyMode === "mentor") {
-          data = await getMentorConversations(userId);
+          data = await getMentorConversations(userId, 500);
         } else if (historyMode === "codegen") {
-          data = await getCodegenConversations(userId);
+          data = await getCodegenConversations(userId, 500);
         } else if (historyMode === "signals") {
-          data = await getUserSignals(userId, 50);
+          data = await getUserSignals(userId, 500);
         } else if (historyMode === "backtest") {
-          data = await getBacktestResults(userId, 50, 0);
+          data = await getBacktestResults(userId, 500, 0);
         }
 
         if (cancelled) return;
@@ -171,7 +171,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             return {
               id: item?.conversation_id || item?.id,
               title: item?.preview || "Mentor Conversation",
-              date: item?.started_at || item?.created_at,
+              date:
+                item?.activity_at ||
+                item?.updated_at ||
+                item?.started_at ||
+                item?.created_at,
               href: `/dashboard/mentor/messages/${item?.conversation_id || item?.id}`,
             };
           }
@@ -180,7 +184,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             return {
               id: item?.conversation_id || item?.id,
               title: item?.description || "Logic Session",
-              date: item?.created_at || item?.started_at,
+              date:
+                item?.activity_at ||
+                item?.updated_at ||
+                item?.created_at ||
+                item?.started_at,
               href: `/dashboard/codegen/session/${item?.conversation_id || item?.id}`,
             };
           }

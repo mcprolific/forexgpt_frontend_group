@@ -20,8 +20,10 @@ import {
   getConversationHistory,
   getConversations,
   getMentorConversationCacheKey,
+  normalizeMentorMessageHistory,
 } from '../../../services/mentorService';
 import { streamMentorResponse } from '../../../features/mentor/mentorStream';
+import { getGeneratedCodeDetail } from '../../../services/codeGenService';
 import toast from 'react-hot-toast';
 import { formatLongDateTime } from '../../../utils/formatters';
 import { logError, normalizeError } from '../../../utils/errorHandling';
@@ -50,7 +52,11 @@ const isCodegenCandidate = (content) => {
 const extractStrategyLine = (content) => {
   if (!content) return '';
   const withoutCode = content.replace(/```[\s\S]*?```/g, '');
-  const cleaned = withoutCode.replace(/\r/g, '').trim();
+  const cleaned = withoutCode
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/\r/g, '')
+    .trim();
   const lines = cleaned
     .split('\n')
     .map((line) => line.trim())
@@ -80,6 +86,7 @@ const getAnalysisInflightKey = (userId, key) =>
 
 const STREAM_RENDER_INTERVAL_MS = 35;
 const STREAM_RENDER_MAX_PART_SIZE = 4;
+const STREAM_INACTIVITY_TIMEOUT_MS = 20000;
 
 const splitRenderableStreamChunk = (chunk) => {
   if (!chunk) return [];
@@ -101,10 +108,24 @@ const parseStoredMessages = (raw) => {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeMentorMessageHistory(parsed);
   } catch {
     return [];
   }
+};
+
+const normalizeSuggestionList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
 };
 
 const readAnalysisCache = (userId, key) => {
@@ -324,7 +345,7 @@ const simplifyMermaidDiagram = (text) => {
     if (/^(subgraph|end|direction)\b/i.test(t)) return true;
     if (/^%%/.test(t)) return true;
     if (/-->|---|==>|-.->/.test(t)) return true;
-    if (/^\w+[\[(]/.test(t)) return true;
+    if (/^\w+[[()]/.test(t)) return true;
     return false;
   });
   return keep.join('\n').trim();
@@ -629,7 +650,7 @@ const MentorMessages = () => {
       try {
         setErrorMessage('');
         const res = await getConversationHistory(conversationId, userId);
-        const history = Array.isArray(res.history) ? res.history : [];
+        const history = normalizeMentorMessageHistory(res.history);
         const nextHistory = history.length > 0 ? history : cachedHistory;
         setMessages(nextHistory);
         localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
@@ -711,10 +732,18 @@ const MentorMessages = () => {
       state?.metricsForMentor?.custom_code ||
       state?.results?.custom_code ||
       '';
+    const nextBacktestData = {
+      ...state,
+      strategyType: incomingStrategyType,
+      strategyCode: incomingStrategyCode,
+      results: incomingResults,
+    };
 
     if (!userId || state?.mode !== 'analyze' || !incomingResults) {
       return;
     }
+
+    setBacktestData(nextBacktestData);
 
     if (location.state?.mode === 'analyze') {
       navigate(location.pathname, { replace: true, state: null });
@@ -737,6 +766,26 @@ const MentorMessages = () => {
 
     const cached = readAnalysisCache(userId, analysisKey);
     if (cached?.analysis) {
+      if (state?.skipToImprovement && incomingStrategyCode) {
+        navigate('/dashboard/codegen/session/new', {
+          state: {
+            mode: 'improve',
+            originalCode: incomingStrategyCode,
+            backtestResults: incomingResults || {},
+            mentorAnalysis: cached.analysis || '',
+            educationalAnalysis: cached.educational_analysis || cached.analysis || '',
+            improvementSuggestions: normalizeSuggestionList(
+              cached.improvement_suggestions
+            ),
+            strategyConfig: cached.strategy_config || null,
+            strategyName:
+              cached.strategy_name || incomingStrategyType || incomingResults?.strategy_name || '',
+            codeId: cached.code_id || null,
+            fromBacktest: true,
+          },
+        });
+        return;
+      }
       if (cached.conversation_id) {
         activeConversationIdRef.current = cached.conversation_id;
         setActiveConversationId(cached.conversation_id);
@@ -756,12 +805,6 @@ const MentorMessages = () => {
 
     const runBacktestAnalysis = async () => {
       setAnalysisMode(true);
-      setBacktestData({
-        ...state,
-        strategyType: incomingStrategyType,
-        strategyCode: incomingStrategyCode,
-        results: incomingResults,
-      });
       setSending(true);
       analysisRunningRef.current = true;
       markAnalysisInflight(userId, analysisKey);
@@ -776,10 +819,12 @@ const MentorMessages = () => {
 
         const analysisContent =
           data?.analysis ||
+          data?.educational_analysis ||
           (data?.verdict || data?.explanation
             ? `**${data.verdict || 'Analysis'}**\n\n${data.explanation || ''}`
             : '');
         const nextConversationId = data?.conversation_id || null;
+        const nextSuggestions = normalizeSuggestionList(data?.improvement_suggestions);
 
 
         setMessages((prev) => {
@@ -799,6 +844,12 @@ const MentorMessages = () => {
               id: nextId,
               role: 'assistant',
               content: analysisContent || 'Analysis completed, but no details were returned.',
+              code_id: data?.code_id || null,
+              strategy_name: data?.strategy_name || incomingStrategyType || null,
+              strategy_config: data?.strategy_config || null,
+              educational_analysis:
+                data?.educational_analysis || analysisContent || null,
+              improvement_suggestions: nextSuggestions,
               timestamp: nextTimestamp,
             },
           ];
@@ -811,6 +862,12 @@ const MentorMessages = () => {
             id: nextId,
             role: 'assistant',
             content: analysisContent || 'Analysis completed, but no details were returned.',
+            code_id: data?.code_id || null,
+            strategy_name: data?.strategy_name || incomingStrategyType || null,
+            strategy_config: data?.strategy_config || null,
+            educational_analysis:
+              data?.educational_analysis || analysisContent || null,
+            improvement_suggestions: nextSuggestions,
             timestamp: nextTimestamp,
           };
           const nextHistory = messages.some(
@@ -867,8 +924,34 @@ const MentorMessages = () => {
         writeAnalysisCache(userId, analysisKey, {
           analysis: analysisContent || 'Analysis completed, but no details were returned.',
           conversation_id: nextConversationId,
+          code_id: data?.code_id || null,
+          strategy_name: data?.strategy_name || incomingStrategyType || null,
+          strategy_config: data?.strategy_config || null,
+          educational_analysis:
+            data?.educational_analysis || analysisContent || null,
+          improvement_suggestions: nextSuggestions,
           timestamp: data?.timestamp || new Date().toISOString(),
         });
+
+        if (state?.skipToImprovement && incomingStrategyCode) {
+          navigate('/dashboard/codegen/session/new', {
+            state: {
+              mode: 'improve',
+              originalCode: incomingStrategyCode,
+              backtestResults: incomingResults || {},
+              mentorAnalysis: analysisContent || '',
+              educationalAnalysis:
+                data?.educational_analysis || analysisContent || '',
+              improvementSuggestions: nextSuggestions,
+              strategyConfig: data?.strategy_config || null,
+              strategyName:
+                data?.strategy_name || incomingStrategyType || incomingResults?.strategy_name || '',
+              codeId: data?.code_id || null,
+              fromBacktest: true,
+            },
+          });
+          return;
+        }
         clearAnalysisInflight(userId, analysisKey);
       } catch (error) {
         if (!cancelled) {
@@ -1037,8 +1120,23 @@ const MentorMessages = () => {
       }
     };
 
+    const resetStreamWatchdog = () => {
+      if (streamWatchdogRef.current) {
+        clearTimeout(streamWatchdogRef.current);
+      }
+      streamWatchdogRef.current = setTimeout(() => {
+        if (!streamFinalizedRef.current) {
+          finalizeForce();
+        }
+      }, STREAM_INACTIVITY_TIMEOUT_MS);
+    };
+
     const finalizeIfIdle = () => {
       streamFinalizeRef.current = true;
+      if (streamWatchdogRef.current) {
+        clearTimeout(streamWatchdogRef.current);
+        streamWatchdogRef.current = null;
+      }
       if (streamQueueRef.current.length === 0 && !streamFinalizedRef.current) {
         if (streamTimerRef.current) {
           clearInterval(streamTimerRef.current);
@@ -1112,12 +1210,7 @@ const MentorMessages = () => {
       finalizeIfIdle();
     };
 
-    // Watchdog: if onDone never fires, finalize after 12s of inactivity
-    streamWatchdogRef.current = setTimeout(() => {
-      if (!streamFinalizedRef.current) {
-        finalizeForce();
-      }
-    }, 12000);
+    resetStreamWatchdog();
 
     streamMentorResponse({
       question: requestContent,
@@ -1130,10 +1223,15 @@ const MentorMessages = () => {
         primeMentorConversationCache(nextId, lastUserPromptRef.current);
       },
       onChunk: (chunk) => {
+        resetStreamWatchdog();
         streamAccumulator.current += chunk;
         enqueueChunk(chunk);
       },
       onDone: () => {
+        if (streamWatchdogRef.current) {
+          clearTimeout(streamWatchdogRef.current);
+          streamWatchdogRef.current = null;
+        }
         streamFinalizeRef.current = true;
         if (!streamTimerRef.current) {
           streamTimerRef.current = setInterval(() => {
@@ -1260,14 +1358,30 @@ const MentorMessages = () => {
     });
   };
 
-  const handleImproveStrategy = () => {
-    const strategyCode =
+  const handleImproveStrategy = async (message = messages[messages.length - 1]) => {
+    const strategyCodeFromBacktest =
       backtestData?.strategyCode ||
       backtestData?.results?.custom_code ||
       backtestData?.code ||
       '';
+    const codeId = message?.code_id || backtestData?.code_id || null;
+    let strategyCode = strategyCodeFromBacktest;
 
-    if (!backtestData || !strategyCode) {
+    if (!strategyCode && codeId && userId) {
+      try {
+        const detail = await getGeneratedCodeDetail(codeId, userId);
+        strategyCode =
+          detail?.code ||
+          detail?.generated_code ||
+          detail?.python_code ||
+          detail?.strategy_code ||
+          '';
+      } catch (error) {
+        logError('Failed to load source strategy code:', error);
+      }
+    }
+
+    if (!strategyCode) {
       toast.error('No strategy code is available to improve.');
       return;
     }
@@ -1276,8 +1390,25 @@ const MentorMessages = () => {
       state: {
         mode: 'improve',
         originalCode: strategyCode,
-        backtestResults: backtestData?.results || {},
-        mentorAnalysis: messages[messages.length - 1]?.content || '',
+        backtestResults:
+          backtestData?.results ||
+          (message?.strategy_name ? { strategy_name: message.strategy_name } : {}),
+        mentorAnalysis:
+          message?.educational_analysis ||
+          message?.content ||
+          messages[messages.length - 1]?.content ||
+          '',
+        educationalAnalysis: message?.educational_analysis || '',
+        improvementSuggestions: normalizeSuggestionList(
+          message?.improvement_suggestions
+        ),
+        strategyConfig: message?.strategy_config || backtestData?.strategy_config || null,
+        strategyName:
+          message?.strategy_name ||
+          backtestData?.strategyType ||
+          backtestData?.results?.strategy_name ||
+          '',
+        codeId,
       },
     });
   };
@@ -1392,12 +1523,12 @@ const MentorMessages = () => {
                 isCodegenCandidate(message.content);
               const showImproveStrategy =
                 message.role === 'assistant' &&
-                analysisMode &&
                 idx === messages.length - 1 &&
                 Boolean(
                   backtestData?.strategyCode ||
                   backtestData?.results?.custom_code ||
-                  backtestData?.code
+                  backtestData?.code ||
+                  message?.code_id
                 );
 
               return (
@@ -1414,15 +1545,6 @@ const MentorMessages = () => {
                         : 'bg-white/[0.03] border border-white/5 text-gray-200'
                     }`}
                   >
-                    {/* AI label removed */}
-                    {message.role === 'assistant' && false && (
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
-                          AI MENTOR
-                        </span>
-                      </div>
-                    )}
-
                     {(() => {
                       const { markdown, diagram } = extractMermaidBlock(message.content);
                       return (
@@ -1451,7 +1573,7 @@ const MentorMessages = () => {
                         {showImproveStrategy && (
                           <button
                             type="button"
-                            onClick={handleImproveStrategy}
+                            onClick={() => handleImproveStrategy(message)}
                             className="px-4 py-2 rounded-lg bg-green-500 text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
                           >
                             Improve Strategy
@@ -1496,13 +1618,6 @@ const MentorMessages = () => {
                 <div className="max-w-[85%] bg-white/[0.03] border border-white/5 rounded-2xl p-4">
                   {streamingContent ? (
                     <>
-                      {/* AI label removed */}
-                      {false && <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">
-                          AI MENTOR
-                        </span>
-                        <div className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                      </div>}
                       {(() => {
                         const { markdown, diagram } = extractMermaidBlock(streamingContent);
                         return (

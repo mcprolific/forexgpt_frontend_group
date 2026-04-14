@@ -27,6 +27,18 @@ const selectCls =
     'w-full bg-[#0d0d0d] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white ' +
     'focus:border-yellow-500/60 focus:outline-none transition-colors appearance-none';
 
+const normalizeStrategyNameForApi = (strategyName) => {
+    if (strategyName === 'sma') return 'sma_cross';
+    if (strategyName === 'bollinger') return 'bollinger_bands';
+    return strategyName;
+};
+
+const normalizePairForApi = (pair) =>
+    String(pair || '')
+        .toUpperCase()
+        .replace(/[^A-Z]/g, '')
+        .slice(0, 6);
+
 /* ─── Component ───────────────────────────────────────────── */
 const BacktestForm = () => {
     const { user } = useAuth();
@@ -87,6 +99,8 @@ const BacktestForm = () => {
     const payload = () => {
         let strategy_params = {};
         const { strategy_name } = form;
+        const apiStrategyName = normalizeStrategyNameForApi(strategy_name);
+        const apiPair = normalizePairForApi(form.pair) || 'EURUSD';
 
         if (strategy_name === 'rsi') {
             strategy_params = { period: Number(form.period), oversold: Number(form.oversold), overbought: Number(form.overbought) };
@@ -100,8 +114,8 @@ const BacktestForm = () => {
 
         return {
             user_id: user?.user_id || user?.id,
-            pair: form.pair,
-            strategy_name,
+            pair: apiPair,
+            strategy_name: apiStrategyName,
             strategy_id: form.strategy_id || null,
             start_date: form.start_date,
             end_date: form.end_date,
@@ -137,7 +151,7 @@ const BacktestForm = () => {
                 const customPayload = {
                     user_id: String(userId),
                     custom_code: customCode,
-                    pair: form.pair,
+                    pair: normalizePairForApi(form.pair) || 'EURUSD',
                     start_date: form.start_date,
                     end_date: form.end_date,
                     timeframe: form.timeframe,

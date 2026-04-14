@@ -100,7 +100,12 @@ const Backtests = () => {
 
   const [result, setResult] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const strategyCode = location.state?.customCode || location.state?.strategyCode || '';
+  const strategyCode =
+    location.state?.customCode ||
+    location.state?.strategyCode ||
+    result?.custom_code ||
+    result?.strategy_code ||
+    '';
   const expectancy = result?.metrics ? calculateExpectancy(result.metrics) : null;
   const performanceVerdict = result?.metrics ? classifyPerformance(result.metrics, expectancy) : null;
   const metricsForMentor = result?.metrics
@@ -109,8 +114,8 @@ const Backtests = () => {
         pair: result.pair || result.metrics.pair || null,
         start_date: result.start_date || result.metrics.start_date || null,
         end_date: result.end_date || result.metrics.end_date || null,
-        total_return_pct: result.metrics.total_return_pct ?? null,
-        total_return: result.metrics.total_return_pct ?? null,
+        total_return_pct: result.metrics.total_return_pct ?? result.metrics.total_return ?? null,
+        total_return: result.metrics.total_return ?? result.metrics.total_return_pct ?? null,
         cagr_pct: result.metrics.cagr_pct ?? null,
         sharpe_ratio: result.metrics.sharpe_ratio ?? null,
         sortino_ratio: result.metrics.sortino_ratio ?? null,
@@ -118,8 +123,8 @@ const Backtests = () => {
         max_drawdown_pct: result.metrics.max_drawdown_pct ?? null,
         max_drawdown: result.metrics.max_drawdown_pct ?? null,
         total_trades: result.metrics.total_trades ?? null,
-        win_rate_pct: result.metrics.win_rate_pct ?? null,
-        win_rate: result.metrics.win_rate_pct ?? null,
+        win_rate_pct: result.metrics.win_rate_pct ?? result.metrics.win_rate ?? null,
+        win_rate: result.metrics.win_rate ?? result.metrics.win_rate_pct ?? null,
         profit_factor: result.metrics.profit_factor ?? null,
         avg_win: result.metrics.avg_win ?? null,
         avg_loss: result.metrics.avg_loss ?? null,
@@ -199,6 +204,19 @@ const Backtests = () => {
 
   const handleNeedsImprovement = () => {
     if (!result || !metricsForMentor) return;
+
+    if (strategyCode) {
+      navigate('/dashboard/codegen/session/new', {
+        state: {
+          mode: 'improve',
+          originalCode: strategyCode,
+          backtestResults: metricsForMentor,
+          mentorAnalysis: '',
+          fromBacktest: true,
+        },
+      });
+      return;
+    }
 
     navigate('/dashboard/mentor/messages/new', {
       state: {

@@ -53,12 +53,20 @@ const normalizeSession = (item) => {
 
   const description =
     item.description ||
+    item.saved_description ||
     item.strategy_description ||
     item.title ||
     item.prompt ||
     item.message ||
     item.question ||
     "Neural Logic";
+
+  const activity_at =
+    item.updated_at ||
+    item.created_at ||
+    item.started_at ||
+    item.timestamp ||
+    new Date().toISOString();
 
   const created_at =
     item.created_at ||
@@ -71,6 +79,7 @@ const normalizeSession = (item) => {
     ...item,
     conversation_id,
     description,
+    activity_at,
     created_at,
   };
 };
@@ -91,8 +100,8 @@ const mergeSessionLists = (...lists) => {
     });
 
   return Array.from(merged.values()).sort((a, b) => {
-    const first = new Date(b.created_at || 0).getTime();
-    const second = new Date(a.created_at || 0).getTime();
+    const first = new Date(b.activity_at || b.updated_at || b.created_at || 0).getTime();
+    const second = new Date(a.activity_at || a.updated_at || a.created_at || 0).getTime();
     return first - second;
   });
 };
@@ -114,7 +123,222 @@ const normalizeHistory = (payload) => {
   if (Array.isArray(payload?.history)) return payload.history;
   if (Array.isArray(payload?.messages)) return payload.messages;
   if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
   return [];
+};
+
+const pickFirstText = (...values) =>
+  values.find((value) => typeof value === "string" && value.trim()) || "";
+
+const normalizeSuggestionList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const buildSuggestionContent = (suggestions) => {
+  if (!suggestions.length) return "";
+  return `Improvement Suggestions\n\n${suggestions
+    .map((suggestion) => `- ${suggestion}`)
+    .join("\n")}`;
+};
+
+const normalizeRole = (item) => {
+  const rawRole = String(
+    item?.role ||
+      item?.sender ||
+      item?.source ||
+      item?.author ||
+      item?.message_role ||
+      ""
+  ).toLowerCase();
+
+  if (
+    rawRole.includes("user") ||
+    rawRole.includes("human") ||
+    rawRole.includes("client")
+  ) {
+    return "user";
+  }
+
+  if (
+    rawRole.includes("assistant") ||
+    rawRole.includes("ai") ||
+    rawRole.includes("bot") ||
+    rawRole.includes("system")
+  ) {
+    return "assistant";
+  }
+
+  return null;
+};
+
+const buildHistoryMessage = (item, role, index, content, extras = {}) => {
+  const text =
+    typeof content === "string" ? content.trim() : String(content || "").trim();
+
+  if (!text && !extras.code) return null;
+
+  const timestamp =
+    item?.timestamp ||
+    item?.created_at ||
+    item?.updated_at ||
+    item?.date ||
+    new Date().toISOString();
+
+  return {
+    id:
+      extras.id ||
+      item?.message_id ||
+      item?.id ||
+      item?.code_id ||
+      `${role}-${index}-${timestamp}`,
+    role,
+    content: text,
+    conversation_id:
+      item?.conversation_id ||
+      item?.conversationId ||
+      item?.chat_id ||
+      item?.session_id ||
+      null,
+    code:
+      extras.code ??
+      item?.code ??
+      item?.generated_code ??
+      item?.python_code ??
+      item?.strategy_code ??
+      null,
+    code_id: extras.code_id ?? item?.code_id ?? null,
+    strategy_name: extras.strategy_name ?? item?.strategy_name ?? null,
+    strategy_config: extras.strategy_config ?? item?.strategy_config ?? null,
+    educational_analysis:
+      extras.educational_analysis ?? item?.educational_analysis ?? null,
+    improvement_suggestions:
+      extras.improvement_suggestions ??
+      normalizeSuggestionList(item?.improvement_suggestions),
+    saved_description:
+      extras.saved_description ??
+      item?.description ??
+      item?.saved_description ??
+      null,
+    timestamp,
+  };
+};
+
+const normalizeHistoryEntry = (item, index) => {
+  if (typeof item === "string") {
+    return [
+      buildHistoryMessage(
+        { timestamp: new Date().toISOString() },
+        "assistant",
+        index,
+        item
+      ),
+    ].filter(Boolean);
+  }
+
+  if (!item || typeof item !== "object") return [];
+
+  const normalizedRole = normalizeRole(item);
+  const directContent = pickFirstText(
+    item.content,
+    item.text,
+    item.message,
+    item.body
+  );
+
+  if (normalizedRole && directContent) {
+    return [
+      buildHistoryMessage(item, normalizedRole, index, directContent),
+    ].filter(Boolean);
+  }
+
+  const promptText = pickFirstText(
+    item.description,
+    item.saved_description,
+    item.prompt,
+    item.question,
+    item.strategy_description,
+    item.user_message,
+    item.request
+  );
+  const improvementSuggestions = normalizeSuggestionList(
+    item.improvement_suggestions
+  );
+  const responseText = pickFirstText(
+    item.response,
+    item.answer,
+    item.educational_analysis,
+    item.explanation,
+    item.assistant_message,
+    buildSuggestionContent(improvementSuggestions),
+    !normalizedRole ? item.content : ""
+  );
+  const code =
+    item.code ??
+    item.generated_code ??
+    item.python_code ??
+    item.strategy_code ??
+    null;
+
+  const messages = [];
+
+  if (promptText) {
+    messages.push(
+      buildHistoryMessage(item, "user", `${index}-user`, promptText, {
+        id: item?.prompt_id || item?.user_message_id || `${item?.id || index}-user`,
+        saved_description:
+          item?.description || item?.saved_description || item?.strategy_description,
+      })
+    );
+  }
+
+  if (responseText || code) {
+    messages.push(
+      buildHistoryMessage(item, "assistant", `${index}-assistant`, responseText, {
+        id:
+          item?.response_id ||
+          item?.assistant_message_id ||
+          item?.code_id ||
+          `${item?.id || index}-assistant`,
+        code,
+        code_id: item?.code_id || null,
+        strategy_name: item?.strategy_name || null,
+        strategy_config: item?.strategy_config || null,
+        educational_analysis:
+          item?.educational_analysis || item?.analysis || item?.explanation || null,
+        improvement_suggestions: improvementSuggestions,
+      })
+    );
+  }
+
+  return messages.filter(Boolean);
+};
+
+export const normalizeCodeGenMessageHistory = (payload) => {
+  const rawHistory = normalizeHistory(payload);
+  const dedupe = new Set();
+
+  return rawHistory.flatMap(normalizeHistoryEntry).filter((message) => {
+    const key = [
+      message.role,
+      message.timestamp,
+      message.content,
+      message.code || "",
+    ].join("|");
+
+    if (dedupe.has(key)) return false;
+    dedupe.add(key);
+    return true;
+  });
 };
 
 /**
@@ -215,7 +439,7 @@ export const improveStrategy = async (
   return res.data;
 };
 
-export const getConversations = async (userId, limit = 20) => {
+export const getConversations = async (userId, limit = 500) => {
   const cached = readCachedSessionList(userId);
 
   try {
@@ -262,7 +486,7 @@ export const getCodeConversationHistory = async (conversationId, userId) => {
     for (const url of candidates) {
       try {
         const res = await axiosInstance.get(url);
-        const history = normalizeHistory(res.data?.history ?? res.data);
+        const history = normalizeCodeGenMessageHistory(res.data?.history ?? res.data);
         const nextHistory = history.length > 0 ? history : cached;
 
         if (nextHistory.length > 0 && typeof localStorage !== "undefined") {
@@ -284,10 +508,10 @@ export const getCodeConversationHistory = async (conversationId, userId) => {
       }
     }
 
-    return { history: cached };
+    return { history: normalizeCodeGenMessageHistory(cached) };
   } catch (error) {
     if (cached.length > 0) {
-      return { history: cached };
+      return { history: normalizeCodeGenMessageHistory(cached) };
     }
     throw error;
   }
