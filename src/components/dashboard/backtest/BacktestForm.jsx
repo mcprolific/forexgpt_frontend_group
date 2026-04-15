@@ -28,7 +28,7 @@ const selectCls =
     'focus:border-yellow-500/60 focus:outline-none transition-colors appearance-none';
 
 const normalizeStrategyNameForApi = (strategyName) => {
-    if (strategyName === 'sma') return 'sma_cross';
+    if (strategyName === 'sma' || strategyName === 'sma_cross') return 'moving_average_crossover';
     if (strategyName === 'bollinger') return 'bollinger_bands';
     return strategyName;
 };

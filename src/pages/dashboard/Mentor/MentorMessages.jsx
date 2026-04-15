@@ -84,8 +84,9 @@ const getAnalysisCacheKey = (userId, key) =>
 const getAnalysisInflightKey = (userId, key) =>
   `fgpt_mentor_backtest_inflight_${userId || 'anon'}_${key || 'unknown'}`;
 
-const STREAM_RENDER_INTERVAL_MS = 20;
+const STREAM_RENDER_INTERVAL_MS = 16;
 const STREAM_RENDER_MAX_PART_SIZE = 24;
+const STREAM_RENDER_MAX_BATCH_CHARS = 120;
 const STREAM_INACTIVITY_TIMEOUT_MS = 20000;
 const MENTOR_REPLY_POLL_TIMEOUT_MS = 90000;
 
@@ -103,6 +104,30 @@ const splitRenderableStreamChunk = (chunk) => {
     }
     return part.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, 'g')) || [part];
   });
+};
+
+const takeNextRenderableBatch = (queue) => {
+  if (!Array.isArray(queue) || queue.length === 0) return '';
+
+  let batch = '';
+  while (queue.length > 0) {
+    const nextPart = queue[0];
+    if (!nextPart) {
+      queue.shift();
+      continue;
+    }
+
+    if (batch && batch.length + nextPart.length > STREAM_RENDER_MAX_BATCH_CHARS) {
+      break;
+    }
+
+    batch += queue.shift();
+    if (batch.length >= STREAM_RENDER_MAX_BATCH_CHARS) {
+      break;
+    }
+  }
+
+  return batch;
 };
 
 const parseStoredMessages = (raw) => {
@@ -1063,9 +1088,9 @@ const MentorMessages = () => {
       if (!streamTimerRef.current) {
         streamTimerRef.current = setInterval(() => {
           if (!isMountedRef.current) return;
-          const nextPart = streamQueueRef.current.shift();
-          if (nextPart) {
-            setStreamingContent((prev) => prev + nextPart);
+          const nextBatch = takeNextRenderableBatch(streamQueueRef.current);
+          if (nextBatch) {
+            setStreamingContent((prev) => prev + nextBatch);
           }
           if (streamQueueRef.current.length === 0 && streamFinalizeRef.current) {
             if (streamTimerRef.current) {
@@ -1264,9 +1289,9 @@ const MentorMessages = () => {
         if (!streamTimerRef.current) {
           streamTimerRef.current = setInterval(() => {
             if (!isMountedRef.current) return;
-            const nextPart = streamQueueRef.current.shift();
-            if (nextPart) {
-              setStreamingContent((prev) => prev + nextPart);
+            const nextBatch = takeNextRenderableBatch(streamQueueRef.current);
+            if (nextBatch) {
+              setStreamingContent((prev) => prev + nextBatch);
             }
             if (streamQueueRef.current.length === 0 && streamFinalizeRef.current) {
               if (streamTimerRef.current) {
