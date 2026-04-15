@@ -34,6 +34,33 @@ const writeCache = (key, value) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
+const normalizeStrategyNameForApi = (strategyName) => {
+  const normalized = String(strategyName || "").trim().toLowerCase();
+
+  if (!normalized) return strategyName;
+  if (normalized === "sma" || normalized === "sma_cross") {
+    return "moving_average_crossover";
+  }
+  if (normalized === "bollinger") {
+    return "bollinger_bands";
+  }
+
+  return strategyName;
+};
+
+const normalizeBacktestPayload = (payload) => {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const strategyName = normalizeStrategyNameForApi(payload.strategy_name);
+  const strategyType = normalizeStrategyNameForApi(payload.strategy_type);
+
+  return {
+    ...payload,
+    ...(payload.strategy_name ? { strategy_name: strategyName } : {}),
+    ...(payload.strategy_type ? { strategy_type: strategyType } : {}),
+  };
+};
+
 const normalizeBacktest = (item) => {
   if (!item || typeof item !== "object") return null;
 
@@ -91,7 +118,7 @@ const syncBacktestCaches = (userId, backtest) => {
 };
 
 export const runBacktest = async (userId, payload) => {
-  const body = { user_id: userId, ...payload };
+  const body = normalizeBacktestPayload({ user_id: userId, ...payload });
   const res = await axiosInstance.post("/backtest/run", body);
   syncBacktestCaches(userId, res.data);
   return res.data;

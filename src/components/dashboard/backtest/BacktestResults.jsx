@@ -1106,7 +1106,7 @@ const BacktestResults = ({
                                 : `View Trade Log (${totalTrades} trades)`}
                     </button>
 
-                    {showTrades && trades.length > 0 && (
+                    {showTrades && Array.isArray(trades) && trades.length > 0 && (
                         <div className="overflow-x-auto rounded-2xl border border-white/5">
                             <table className="min-w-[980px] w-full border-collapse text-left text-xs">
                                 <thead className="bg-white/[0.03]">
@@ -1158,7 +1158,7 @@ const BacktestResults = ({
                         </div>
                     )}
 
-                    {showTrades && !tradesLoading && trades.length === 0 && (
+                    {showTrades && !tradesLoading && (!Array.isArray(trades) || trades.length === 0) && (
                         <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-6 text-center text-sm text-white/35">
                             No trade records were returned for this backtest.
                         </div>

@@ -6,8 +6,6 @@ const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   "http://127.0.0.1:8000";
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const splitFallbackText = (text) => {
   if (!text) return [];
 
@@ -15,8 +13,8 @@ const splitFallbackText = (text) => {
   if (!words) return [text];
 
   return words.flatMap((part) => {
-    if (part.length <= 20) return [part];
-    return part.match(/.{1,20}/g) || [part];
+    if (part.length <= 120) return [part];
+    return part.match(/.{1,120}/g) || [part];
   });
 };
 
@@ -25,7 +23,6 @@ const emitFallbackStream = async (text, onChunk) => {
 
   for (const part of parts) {
     onChunk(part);
-    await sleep(30);
   }
 };
 
@@ -49,9 +46,13 @@ const extractTextCandidate = (value) => {
     value?.text,
     value?.response,
     value?.answer,
+    value?.educational_analysis,
     value?.analysis,
     value?.explanation,
+    value?.assistant_message,
+    value?.mentor_response,
     value?.message,
+    value?.body,
     value?.data,
     value?.payload,
     value?.result,
@@ -67,6 +68,45 @@ const extractTextCandidate = (value) => {
   }
 
   return "";
+};
+
+const tryParseJson = (value) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const emitFromNonStreamPayload = (payload, { onChunk, onConversationId }) => {
+  if (payload == null) return false;
+
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    if (!trimmed) return false;
+
+    const parsed = tryParseJson(trimmed);
+    if (parsed && typeof parsed === "object") {
+      return emitFromNonStreamPayload(parsed, { onChunk, onConversationId });
+    }
+
+    onChunk(trimmed);
+    return true;
+  }
+
+  if (typeof payload === "object") {
+    if (payload?.conversation_id && onConversationId) {
+      onConversationId(payload.conversation_id);
+    }
+
+    const text = extractTextCandidate(payload);
+    if (text) {
+      onChunk(text);
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const processSseFrame = (frame, { onChunk, onDone, onConversationId }) => {
@@ -190,6 +230,7 @@ export async function streamMentorResponse({
     ...(userId ? { user_id: userId } : {}),
   });
   let streamedText = "";
+  let hasDeliveredContent = false;
 
   const emitChunk = (chunk) => {
     const nextChunk =
@@ -208,6 +249,7 @@ export async function streamMentorResponse({
     }
 
     streamedText += nextChunk;
+    hasDeliveredContent = true;
     onChunk(nextChunk);
   };
 
@@ -280,6 +322,22 @@ export async function streamMentorResponse({
       throw new Error(`Mentor streaming API error: ${response.status}`);
     }
 
+    const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+    if (contentType && !contentType.includes("text/event-stream")) {
+      const rawBody = await response.text();
+      const emitted = emitFromNonStreamPayload(rawBody, {
+        onChunk: emitChunk,
+        onConversationId,
+      });
+
+      if (!emitted && rawBody.trim()) {
+        emitChunk(rawBody.trim());
+      }
+
+      onDone();
+      return;
+    }
+
     // --- True streaming via ReadableStream + SSE frame parsing ---
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
@@ -311,6 +369,17 @@ export async function streamMentorResponse({
       for (const frame of trailingFrames) {
         if (processSseFrame(frame, { onChunk: emitChunk, onDone, onConversationId })) {
           return;
+        }
+      }
+
+      if (!hasDeliveredContent) {
+        const emitted = emitFromNonStreamPayload(buffer.trim(), {
+          onChunk: emitChunk,
+          onConversationId,
+        });
+
+        if (!emitted && buffer.trim()) {
+          emitChunk(buffer.trim());
         }
       }
     }

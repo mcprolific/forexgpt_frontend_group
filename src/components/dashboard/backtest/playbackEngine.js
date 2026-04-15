@@ -147,6 +147,7 @@ export class ForexPlaybackEngine {
     getTradesForPointer(pointer) {
         const candle = this.candlestickData[pointer];
         if (!candle) return [];
+        if (!Array.isArray(this.trades) || this.trades.length === 0) return [];
 
         const candleTimeMs = candle.time * 1000;
         const previousCandle = this.candlestickData[pointer - 1];
@@ -174,10 +175,12 @@ export class ForexPlaybackEngine {
 
             return entryMatches || exitMatches;
         });
+
+        return currentTrades;
     }
 
     notifyTradeFills(pointer, delayMs = 0) {
-        const currentTrades = this.getTradesForPointer(pointer);
+        const currentTrades = this.getTradesForPointer(pointer) || [];
 
         if (currentTrades.length > 0) {
             const key = `${pointer}:${currentTrades
