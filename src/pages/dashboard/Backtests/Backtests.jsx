@@ -177,6 +177,8 @@ const Backtests = () => {
   const handleUnderstandFailure = () => {
     if (!result || !metricsForMentor) return;
 
+    const prefilledQuestion = `Analyze why this backtest failed and what to change. Strategy: ${metricsForMentor.strategy_name || 'custom'}. Pair: ${metricsForMentor.pair || 'N/A'}. Period: ${metricsForMentor.start_date || 'N/A'} to ${metricsForMentor.end_date || 'N/A'}. Focus on drawdown, profit factor, win rate vs avg win/loss, and expectancy. Provide actionable fixes.`;
+
     if (typeof localStorage !== "undefined") {
       const pendingKey = `fgpt_mentor_backtest_pending_${userId || "anon"}`;
       localStorage.setItem(
@@ -187,6 +189,7 @@ const Backtests = () => {
           strategyCode,
           results: metricsForMentor,
           metricsForMentor,
+          prefilledQuestion,
         })
       );
     }
@@ -198,6 +201,7 @@ const Backtests = () => {
         strategyCode,
         results: metricsForMentor,
         metricsForMentor,
+        prefilledQuestion,
       },
     });
   };

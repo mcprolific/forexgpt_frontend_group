@@ -6,6 +6,13 @@ const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   "http://127.0.0.1:8000";
 
+// Streaming (SSE) can be buffered/blocked in some local or proxied setups.
+// Default to non-streaming unless explicitly enabled.
+const USE_SSE_STREAMING =
+  (typeof import.meta !== "undefined" &&
+    String(import.meta.env?.VITE_MENTOR_USE_SSE || "").toLowerCase() === "true") ||
+  false;
+
 const splitFallbackText = (text) => {
   if (!text) return [];
 
@@ -230,6 +237,7 @@ export async function streamMentorResponse({
     ...(userId ? { user_id: userId } : {}),
   });
   let streamedText = "";
+  let gotFirstChunk = false;
   let hasDeliveredContent = false;
 
   const emitChunk = (chunk) => {

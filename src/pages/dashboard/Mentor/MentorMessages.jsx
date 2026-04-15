@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   FiClock,
   FiCopy,
@@ -8,57 +8,57 @@ import {
   FiSend,
   FiThumbsUp,
   FiZap,
-} from 'react-icons/fi';
-import { motion as Motion } from 'framer-motion';
-import { useSelector } from 'react-redux';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+} from "react-icons/fi";
+import { motion as Motion } from "framer-motion";
+import { useSelector } from "react-redux";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import {
   analyzeBacktest,
   getConversationHistory,
   getConversations,
   getMentorConversationCacheKey,
   normalizeMentorMessageHistory,
-} from '../../../services/mentorService';
-import { streamMentorResponse } from '../../../features/mentor/mentorStream';
-import { getGeneratedCodeDetail } from '../../../services/codeGenService';
-import toast from 'react-hot-toast';
-import { formatLongDateTime } from '../../../utils/formatters';
-import { logError, normalizeError } from '../../../utils/errorHandling';
+} from "../../../services/mentorService";
+import { streamMentorResponse } from "../../../features/mentor/mentorStream";
+import { getGeneratedCodeDetail } from "../../../services/codeGenService";
+import toast from "react-hot-toast";
+import { formatLongDateTime } from "../../../utils/formatters";
+import { logError, normalizeError } from "../../../utils/errorHandling";
 
 const STRATEGY_PATTERNS = [
-  { label: 'mean reversion', regex: /mean\s*reversion/i },
-  { label: 'RSI', regex: /\brsi\b/i },
-  { label: 'MACD', regex: /\bmacd\b/i },
-  { label: 'Bollinger Bands', regex: /bollinger\s*bands/i },
-  { label: 'moving average', regex: /moving\s*average/i },
-  { label: 'momentum', regex: /momentum/i },
-  { label: 'trend following', regex: /trend\s*following/i },
+  { label: "mean reversion", regex: /mean\s*reversion/i },
+  { label: "RSI", regex: /\brsi\b/i },
+  { label: "MACD", regex: /\bmacd\b/i },
+  { label: "Bollinger Bands", regex: /bollinger\s*bands/i },
+  { label: "moving average", regex: /moving\s*average/i },
+  { label: "momentum", regex: /momentum/i },
+  { label: "trend following", regex: /trend\s*following/i },
 ];
 
 const detectStrategyType = (text) =>
-  STRATEGY_PATTERNS.find(({ regex }) => regex.test(text || ''))?.label ?? null;
+  STRATEGY_PATTERNS.find(({ regex }) => regex.test(text || ""))?.label ?? null;
 
 const isCodegenCandidate = (content) => {
   const line = extractStrategyLine(content);
   if (!line) return false;
   return /(strategy|entry|exit|rule|indicator|signal|trade|setup|algorithm|logic)/i.test(
-    line
+    line,
   );
 };
 
 const extractStrategyLine = (content) => {
-  if (!content) return '';
-  const withoutCode = content.replace(/```[\s\S]*?```/g, '');
+  if (!content) return "";
+  const withoutCode = content.replace(/```[\s\S]*?```/g, "");
   const cleaned = withoutCode
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/\r/g, '')
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\r/g, "")
     .trim();
   const lines = cleaned
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
@@ -66,7 +66,7 @@ const extractStrategyLine = (content) => {
     lines.find(
       (line) =>
         line.length <= 200 &&
-        /(strategy|entry|exit|rule|indicator|signal|trade)/i.test(line)
+        /(strategy|entry|exit|rule|indicator|signal|trade)/i.test(line),
     ) ||
     lines.find((line) => line.length <= 200) ||
     lines[0] ||
@@ -76,13 +76,13 @@ const extractStrategyLine = (content) => {
   return sentence.trim();
 };
 
-const getDraftKey = (userId) => `fgpt_mentor_draft_${userId || 'anon'}`;
+const getDraftKey = (userId) => `fgpt_mentor_draft_${userId || "anon"}`;
 const getLastConversationKey = (userId) =>
-  `fgpt_mentor_last_conversation_${userId || 'anon'}`;
+  `fgpt_mentor_last_conversation_${userId || "anon"}`;
 const getAnalysisCacheKey = (userId, key) =>
-  `fgpt_mentor_backtest_analysis_${userId || 'anon'}_${key || 'unknown'}`;
+  `fgpt_mentor_backtest_analysis_${userId || "anon"}_${key || "unknown"}`;
 const getAnalysisInflightKey = (userId, key) =>
-  `fgpt_mentor_backtest_inflight_${userId || 'anon'}_${key || 'unknown'}`;
+  `fgpt_mentor_backtest_inflight_${userId || "anon"}_${key || "unknown"}`;
 
 const STREAM_RENDER_INTERVAL_MS = 16;
 const STREAM_RENDER_MAX_PART_SIZE = 24;
@@ -95,21 +95,29 @@ const splitRenderableStreamChunk = (chunk) => {
 
   const parts = chunk.match(/\S+\s*|\n+/g);
   if (!parts) {
-    return chunk.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, 'g')) || [chunk];
+    return (
+      chunk.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, "g")) || [
+        chunk,
+      ]
+    );
   }
 
   return parts.flatMap((part) => {
     if (part.length <= STREAM_RENDER_MAX_PART_SIZE) {
       return [part];
     }
-    return part.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, 'g')) || [part];
+    return (
+      part.match(new RegExp(`.{1,${STREAM_RENDER_MAX_PART_SIZE}}`, "g")) || [
+        part,
+      ]
+    );
   });
 };
 
 const takeNextRenderableBatch = (queue) => {
-  if (!Array.isArray(queue) || queue.length === 0) return '';
+  if (!Array.isArray(queue) || queue.length === 0) return "";
 
-  let batch = '';
+  let batch = "";
   while (queue.length > 0) {
     const nextPart = queue[0];
     if (!nextPart) {
@@ -117,7 +125,10 @@ const takeNextRenderableBatch = (queue) => {
       continue;
     }
 
-    if (batch && batch.length + nextPart.length > STREAM_RENDER_MAX_BATCH_CHARS) {
+    if (
+      batch &&
+      batch.length + nextPart.length > STREAM_RENDER_MAX_BATCH_CHARS
+    ) {
       break;
     }
 
@@ -143,11 +154,11 @@ const parseStoredMessages = (raw) => {
 const normalizeSuggestionList = (value) => {
   if (Array.isArray(value)) {
     return value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
       .filter(Boolean);
   }
 
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === "string" && value.trim()) {
     return [value.trim()];
   }
 
@@ -155,7 +166,7 @@ const normalizeSuggestionList = (value) => {
 };
 
 const readAnalysisCache = (userId, key) => {
-  if (!userId || !key || typeof localStorage === 'undefined') return null;
+  if (!userId || !key || typeof localStorage === "undefined") return null;
   try {
     const raw = localStorage.getItem(getAnalysisCacheKey(userId, key));
     return raw ? JSON.parse(raw) : null;
@@ -165,22 +176,25 @@ const readAnalysisCache = (userId, key) => {
 };
 
 const writeAnalysisCache = (userId, key, payload) => {
-  if (!userId || !key || typeof localStorage === 'undefined') return;
-  localStorage.setItem(getAnalysisCacheKey(userId, key), JSON.stringify(payload));
+  if (!userId || !key || typeof localStorage === "undefined") return;
+  localStorage.setItem(
+    getAnalysisCacheKey(userId, key),
+    JSON.stringify(payload),
+  );
 };
 
 const markAnalysisInflight = (userId, key) => {
-  if (!userId || !key || typeof localStorage === 'undefined') return;
+  if (!userId || !key || typeof localStorage === "undefined") return;
   localStorage.setItem(getAnalysisInflightKey(userId, key), String(Date.now()));
 };
 
 const clearAnalysisInflight = (userId, key) => {
-  if (!userId || !key || typeof localStorage === 'undefined') return;
+  if (!userId || !key || typeof localStorage === "undefined") return;
   localStorage.removeItem(getAnalysisInflightKey(userId, key));
 };
 
 const isAnalysisInflight = (userId, key, ttlMs = 2 * 60 * 1000) => {
-  if (!userId || !key || typeof localStorage === 'undefined') return false;
+  if (!userId || !key || typeof localStorage === "undefined") return false;
   const raw = localStorage.getItem(getAnalysisInflightKey(userId, key));
   if (!raw) return false;
   const started = Number(raw);
@@ -193,7 +207,7 @@ const isAnalysisInflight = (userId, key, ttlMs = 2 * 60 * 1000) => {
 };
 
 const updateMentorConversationCache = (userId, entry) => {
-  if (!userId || !entry || typeof localStorage === 'undefined') return;
+  if (!userId || !entry || typeof localStorage === "undefined") return;
   const cacheKey = getMentorConversationCacheKey(userId);
   let list = [];
   try {
@@ -205,7 +219,7 @@ const updateMentorConversationCache = (userId, entry) => {
   if (!Array.isArray(list)) list = [];
 
   const existingIndex = list.findIndex(
-    (item) => item?.conversation_id === entry.conversation_id
+    (item) => item?.conversation_id === entry.conversation_id,
   );
   const nextEntry = {
     ...list[existingIndex],
@@ -238,14 +252,12 @@ const MarkdownComponents = {
     <ul className="mb-3 pl-4 space-y-1 list-disc list-outside">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="mb-3 pl-4 space-y-1 list-decimal list-outside">{children}</ol>
+    <ol className="mb-3 pl-4 space-y-1 list-decimal list-outside">
+      {children}
+    </ol>
   ),
-  li: ({ children }) => (
-    <li className="leading-relaxed">{children}</li>
-  ),
-  hr: () => (
-    <hr className="my-5 border-0 h-px bg-white/10" />
-  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  hr: () => <hr className="my-5 border-0 h-px bg-white/10" />,
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-yellow-500/40 pl-3 my-3 text-gray-400 italic">
       {children}
@@ -276,13 +288,11 @@ const MarkdownComponents = {
   strong: ({ children }) => (
     <strong className="font-bold text-white">{children}</strong>
   ),
-  em: ({ children }) => (
-    <em className="italic text-gray-300">{children}</em>
-  ),
+  em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
   code({ className, children, ...props }) {
-    const match = /language-(\w+)/.exec(className || '');
-    if (match && match[1] === 'mermaid') {
-      const diagram = String(children).replace(/\n$/, '');
+    const match = /language-(\w+)/.exec(className || "");
+    if (match && match[1] === "mermaid") {
+      const diagram = String(children).replace(/\n$/, "");
       return <MermaidBlock diagram={diagram} />;
     }
     return match ? (
@@ -291,8 +301,10 @@ const MarkdownComponents = {
           <button
             type="button"
             onClick={() => {
-              navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
-              toast.success('Snippet copied');
+              navigator.clipboard.writeText(
+                String(children).replace(/\n$/, ""),
+              );
+              toast.success("Snippet copied");
             }}
             className="p-1.5 bg-black/50 backdrop-blur-sm rounded-md hover:text-yellow-500 transition-colors text-gray-400"
           >
@@ -305,13 +317,13 @@ const MarkdownComponents = {
           PreTag="div"
           customStyle={{
             margin: 0,
-            padding: '1rem',
-            fontSize: '0.75rem',
-            backgroundColor: '#0d0d0d',
+            padding: "1rem",
+            fontSize: "0.75rem",
+            backgroundColor: "#0d0d0d",
           }}
           {...props}
         >
-          {String(children).replace(/\n$/, '')}
+          {String(children).replace(/\n$/, "")}
         </SyntaxHighlighter>
       </div>
     ) : (
@@ -326,20 +338,19 @@ const MarkdownComponents = {
 };
 
 const shouldRequestDiagram = (text) =>
-  /(diagram|chart|flowchart|graph|plot|visual|timeline|mermaid)/i.test(text || '');
+  /(diagram|chart|flowchart|graph|plot|visual|timeline|mermaid)/i.test(
+    text || "",
+  );
 
 const stripDiagramDirective = (text) => {
   if (!text) return text;
-  return String(text).replace(
-    /\n\nReturn ONLY a Mermaid diagram[\s\S]*$/i,
-    ''
-  );
+  return String(text).replace(/\n\nReturn ONLY a Mermaid diagram[\s\S]*$/i, "");
 };
 
 const MERMAID_KEYWORDS =
   /(gantt|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|pie)/i;
-const hasMermaidFence = (text) => /```mermaid[\s\S]*?```/i.test(text || '');
-const looksLikeMermaid = (text) => MERMAID_KEYWORDS.test(text || '');
+const hasMermaidFence = (text) => /```mermaid[\s\S]*?```/i.test(text || "");
+const looksLikeMermaid = (text) => MERMAID_KEYWORDS.test(text || "");
 
 const cleanMermaidLines = (lines) =>
   lines.filter((line) => {
@@ -351,30 +362,32 @@ const cleanMermaidLines = (lines) =>
   });
 
 const sanitizeMermaidDiagram = (text) => {
-  if (!text) return '';
-  const cleaned = String(text)
-    .replace(/```/g, '')
-    .replace(/\r/g, '')
-    .trim();
-  const lines = cleanMermaidLines(cleaned.split('\n'));
-  return lines.join('\n').trim();
+  if (!text) return "";
+  const cleaned = String(text).replace(/```/g, "").replace(/\r/g, "").trim();
+  const lines = cleanMermaidLines(cleaned.split("\n"));
+  return lines.join("\n").trim();
 };
 
 const simplifyMermaidDiagram = (text) => {
   const raw = sanitizeMermaidDiagram(text);
-  if (!raw) return '';
-  const lines = raw.split('\n');
+  if (!raw) return "";
+  const lines = raw.split("\n");
   const keep = lines.filter((line) => {
     const t = line.trim();
     if (!t) return false;
-    if (/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|journey|pie)\b/i.test(t)) return true;
+    if (
+      /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|journey|pie)\b/i.test(
+        t,
+      )
+    )
+      return true;
     if (/^(subgraph|end|direction)\b/i.test(t)) return true;
     if (/^%%/.test(t)) return true;
     if (/-->|---|==>|-.->/.test(t)) return true;
     if (/^\w+[[()]/.test(t)) return true;
     return false;
   });
-  return keep.join('\n').trim();
+  return keep.join("\n").trim();
 };
 
 const extractMermaidBlock = (text) => {
@@ -383,7 +396,7 @@ const extractMermaidBlock = (text) => {
   const match = normalized.match(/```mermaid\s*([\s\S]*?)```/i);
   if (!match) return { markdown: normalized, diagram: null };
   const diagram = match[1].trim();
-  const markdown = normalized.replace(match[0], '').trim();
+  const markdown = normalized.replace(match[0], "").trim();
   return { markdown, diagram: diagram || null };
 };
 
@@ -391,43 +404,43 @@ const ensureMermaidFence = (text) => {
   if (!text || hasMermaidFence(text)) return text;
   if (!looksLikeMermaid(text)) return text;
 
-  const rawLines = String(text).split('\n');
+  const rawLines = String(text).split("\n");
   const lines = cleanMermaidLines(rawLines);
   const startIdx = lines.findIndex((line) => MERMAID_KEYWORDS.test(line));
   if (startIdx === -1) return text;
 
-  const before = lines.slice(0, startIdx).join('\n').trimEnd();
-  const diagram = lines.slice(startIdx).join('\n').trimEnd();
+  const before = lines.slice(0, startIdx).join("\n").trimEnd();
+  const diagram = lines.slice(startIdx).join("\n").trimEnd();
 
   return `${before}\n\n\`\`\`mermaid\n${diagram}\n\`\`\``.trim();
 };
 
 const MermaidBlock = ({ diagram }) => {
-  const [svgMarkup, setSvgMarkup] = useState('');
-  const [renderError, setRenderError] = useState('');
+  const [svgMarkup, setSvgMarkup] = useState("");
+  const [renderError, setRenderError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     const render = async () => {
-      if (typeof window === 'undefined') return;
-      setSvgMarkup('');
-      setRenderError('');
+      if (typeof window === "undefined") return;
+      setSvgMarkup("");
+      setRenderError("");
       let mermaid = window.mermaid;
       if (!mermaid?.render) {
         try {
-          const mod = await import('mermaid');
+          const mod = await import("mermaid");
           mermaid = mod?.default || mod;
           if (mermaid?.initialize) {
             mermaid.initialize({
               startOnLoad: false,
-              theme: 'dark',
-              securityLevel: 'loose',
+              theme: "dark",
+              securityLevel: "loose",
             });
           }
           window.mermaid = mermaid;
         } catch (error) {
-          console.error('Mermaid library unavailable:', error);
-          setRenderError('Mermaid library failed to load.');
+          console.error("Mermaid library unavailable:", error);
+          setRenderError("Mermaid library failed to load.");
           return;
         }
       }
@@ -436,11 +449,11 @@ const MermaidBlock = ({ diagram }) => {
         const id = `mermaid-${Math.random().toString(36).slice(2)}`;
         const renderFn = mermaid.render;
         const legacyRender = mermaid.mermaidAPI?.render;
-        let svg = '';
+        let svg = "";
 
         const attemptRender = async (source) => {
           const safeSource = sanitizeMermaidDiagram(source);
-          if (!safeSource) return '';
+          if (!safeSource) return "";
 
           if (mermaid.parse) {
             await mermaid.parse(safeSource);
@@ -448,14 +461,14 @@ const MermaidBlock = ({ diagram }) => {
 
           if (renderFn) {
             const result = await renderFn.call(mermaid, id, safeSource);
-            return typeof result === 'string' ? result : result?.svg || '';
+            return typeof result === "string" ? result : result?.svg || "";
           }
 
           if (legacyRender) {
-            let legacySvg = '';
+            let legacySvg = "";
             await new Promise((resolve) => {
               legacyRender.call(mermaid.mermaidAPI, id, safeSource, (code) => {
-                legacySvg = code || '';
+                legacySvg = code || "";
                 resolve();
               });
             });
@@ -463,22 +476,22 @@ const MermaidBlock = ({ diagram }) => {
           }
 
           if (mermaid.run) {
-            const temp = document.createElement('div');
-            temp.style.position = 'absolute';
-            temp.style.left = '-9999px';
-            temp.style.top = '-9999px';
+            const temp = document.createElement("div");
+            temp.style.position = "absolute";
+            temp.style.left = "-9999px";
+            temp.style.top = "-9999px";
             temp.innerHTML = `<pre class="mermaid">${safeSource}</pre>`;
             document.body.appendChild(temp);
             try {
               await mermaid.run({ nodes: [temp] });
-              const svgEl = temp.querySelector('svg');
-              return svgEl ? svgEl.outerHTML : '';
+              const svgEl = temp.querySelector("svg");
+              return svgEl ? svgEl.outerHTML : "";
             } finally {
               document.body.removeChild(temp);
             }
           }
 
-          return '';
+          return "";
         };
 
         svg = await attemptRender(diagram);
@@ -487,14 +500,14 @@ const MermaidBlock = ({ diagram }) => {
         }
 
         if (!svg) {
-          setRenderError('Mermaid did not return an SVG.');
+          setRenderError("Mermaid did not return an SVG.");
           return;
         }
         if (cancelled) return;
         setSvgMarkup(svg);
       } catch (error) {
-        console.error('Mermaid render failed:', error);
-        setRenderError('Could not render this diagram.');
+        console.error("Mermaid render failed:", error);
+        setRenderError("Could not render this diagram.");
       }
     };
 
@@ -512,7 +525,7 @@ const MermaidBlock = ({ diagram }) => {
           type="button"
           onClick={() => {
             navigator.clipboard.writeText(diagram);
-            toast.success('Diagram copied');
+            toast.success("Diagram copied");
           }}
           className="text-gray-400 hover:text-yellow-500 transition-colors"
         >
@@ -535,27 +548,26 @@ const MermaidBlock = ({ diagram }) => {
   );
 };
 
-
 const MentorMessages = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [streamingContent, setStreamingContent] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [analysisMode, setAnalysisMode] = useState(false);
   const [backtestData, setBacktestData] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(
-    conversationId !== 'new' ? conversationId : null
+    conversationId !== "new" ? conversationId : null,
   );
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
-  const streamAccumulator = useRef('');
+  const streamAccumulator = useRef("");
   const streamQueueRef = useRef([]);
   const streamTimerRef = useRef(null);
   const streamFinalizeRef = useRef(false);
@@ -567,7 +579,7 @@ const MentorMessages = () => {
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
   const userIdRef = useRef(userId);
-  const lastUserPromptRef = useRef('');
+  const lastUserPromptRef = useRef("");
   const isMountedRef = useRef(true);
   const analysisKeyRef = useRef(null);
   const analysisRunningRef = useRef(false);
@@ -599,7 +611,7 @@ const MentorMessages = () => {
   }, []);
 
   useEffect(() => {
-    setActiveConversationId(conversationId !== 'new' ? conversationId : null);
+    setActiveConversationId(conversationId !== "new" ? conversationId : null);
   }, [conversationId]);
 
   useEffect(() => {
@@ -609,13 +621,14 @@ const MentorMessages = () => {
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = 'auto';
+    el.style.height = "auto";
     const next = Math.min(el.scrollHeight, 160);
     el.style.height = `${next}px`;
   }, [newMessage]);
 
   const primeMentorConversationCache = useCallback((nextId, preview) => {
-    if (!nextId || !userIdRef.current || typeof localStorage === 'undefined') return;
+    if (!nextId || !userIdRef.current || typeof localStorage === "undefined")
+      return;
 
     const cacheKey = getMentorConversationCacheKey(userIdRef.current);
     const raw = localStorage.getItem(cacheKey);
@@ -631,14 +644,14 @@ const MentorMessages = () => {
       (item) =>
         item?.conversation_id === nextId ||
         item?.id === nextId ||
-        item?.conversationId === nextId
+        item?.conversationId === nextId,
     );
 
     const now = new Date().toISOString();
     const nextItem = {
       ...(match || {}),
       conversation_id: nextId,
-      preview: match?.preview || preview || 'AI Conversation',
+      preview: match?.preview || preview || "AI Conversation",
       started_at: match?.started_at || match?.created_at || now,
       updated_at: now,
       message_count: Math.max(match?.message_count || 0, 1),
@@ -652,7 +665,7 @@ const MentorMessages = () => {
             item?.conversation_id === nextId ||
             item?.id === nextId ||
             item?.conversationId === nextId
-          )
+          ),
       ),
     ];
 
@@ -667,9 +680,9 @@ const MentorMessages = () => {
         return;
       }
 
-      if (conversationId === 'new') {
+      if (conversationId === "new") {
         setMessages(
-          parseStoredMessages(localStorage.getItem(getDraftKey(userId)))
+          parseStoredMessages(localStorage.getItem(getDraftKey(userId))),
         );
         setLoading(false);
         return;
@@ -684,7 +697,7 @@ const MentorMessages = () => {
       const cachedHistory = parseStoredMessages(localStorage.getItem(cacheKey));
 
       try {
-        setErrorMessage('');
+        setErrorMessage("");
         const res = await getConversationHistory(conversationId, userId);
         const history = normalizeMentorMessageHistory(res.history);
         const nextHistory = history.length > 0 ? history : cachedHistory;
@@ -692,14 +705,18 @@ const MentorMessages = () => {
         localStorage.setItem(cacheKey, JSON.stringify(nextHistory));
         localStorage.setItem(getLastConversationKey(userId), conversationId);
       } catch (error) {
-        logError('Mentor history load failed:', error);
+        logError("Mentor history load failed:", error);
         if (cachedHistory.length > 0) {
           setMessages(cachedHistory);
         } else {
-          toast.error(normalizeError(error, { fallback: 'Failed to load history.' }));
+          toast.error(
+            normalizeError(error, { fallback: "Failed to load history." }),
+          );
         }
         setErrorMessage(
-          normalizeError(error, { fallback: 'Failed to load conversation. Please try again.' })
+          normalizeError(error, {
+            fallback: "Failed to load conversation. Please try again.",
+          }),
         );
       } finally {
         setLoading(false);
@@ -712,7 +729,7 @@ const MentorMessages = () => {
   useEffect(() => {
     if (!userId) return;
     const draftKey = getDraftKey(userId);
-    if (conversationId === 'new') {
+    if (conversationId === "new") {
       localStorage.setItem(draftKey, JSON.stringify(messages));
       return;
     }
@@ -722,7 +739,7 @@ const MentorMessages = () => {
   useEffect(() => {
     if (
       location.state?.prefilledQuestion &&
-      conversationId === 'new' &&
+      conversationId === "new" &&
       !messages.length
     ) {
       setNewMessage((current) => current || location.state.prefilledQuestion);
@@ -742,15 +759,15 @@ const MentorMessages = () => {
   useEffect(() => {
     if (!sending) return;
     const last = messages[messages.length - 1];
-    if (last?.role === 'assistant') {
+    if (last?.role === "assistant") {
       setSending(false);
     }
   }, [messages, sending]);
 
   useEffect(() => {
     let state = location.state;
-    if (!state?.mode && typeof localStorage !== 'undefined' && userId) {
-      const pendingKey = `fgpt_mentor_backtest_pending_${userId || 'anon'}`;
+    if (!state?.mode && typeof localStorage !== "undefined" && userId) {
+      const pendingKey = `fgpt_mentor_backtest_pending_${userId || "anon"}`;
       const raw = localStorage.getItem(pendingKey);
       if (raw) {
         try {
@@ -762,12 +779,13 @@ const MentorMessages = () => {
       }
     }
     const incomingResults = state?.metricsForMentor || state?.results;
-    const incomingStrategyType = state?.strategyType || state?.metricsForMentor?.strategy_name;
+    const incomingStrategyType =
+      state?.strategyType || state?.metricsForMentor?.strategy_name;
     const incomingStrategyCode =
       state?.strategyCode ||
       state?.metricsForMentor?.custom_code ||
       state?.results?.custom_code ||
-      '';
+      "";
     const nextBacktestData = {
       ...state,
       strategyType: incomingStrategyType,
@@ -775,20 +793,20 @@ const MentorMessages = () => {
       results: incomingResults,
     };
 
-    if (!userId || state?.mode !== 'analyze' || !incomingResults) {
+    if (!userId || state?.mode !== "analyze" || !incomingResults) {
       return;
     }
 
     setBacktestData(nextBacktestData);
 
-    if (location.state?.mode === 'analyze') {
+    if (location.state?.mode === "analyze") {
       navigate(location.pathname, { replace: true, state: null });
     }
 
     const analysisKey =
       state?.backtestId ||
       incomingResults?.backtest_id ||
-      `${incomingStrategyType || 'analysis'}-${incomingResults?.pair || ''}-${incomingResults?.start_date || ''}-${incomingResults?.end_date || ''}`;
+      `${incomingStrategyType || "analysis"}-${incomingResults?.pair || ""}-${incomingResults?.start_date || ""}-${incomingResults?.end_date || ""}`;
     if (analysisKeyRef.current === analysisKey) return;
     analysisKeyRef.current = analysisKey;
 
@@ -803,19 +821,23 @@ const MentorMessages = () => {
     const cached = readAnalysisCache(userId, analysisKey);
     if (cached?.analysis) {
       if (state?.skipToImprovement && incomingStrategyCode) {
-        navigate('/dashboard/codegen/session/new', {
+        navigate("/dashboard/codegen/session/new", {
           state: {
-            mode: 'improve',
+            mode: "improve",
             originalCode: incomingStrategyCode,
             backtestResults: incomingResults || {},
-            mentorAnalysis: cached.analysis || '',
-            educationalAnalysis: cached.educational_analysis || cached.analysis || '',
+            mentorAnalysis: cached.analysis || "",
+            educationalAnalysis:
+              cached.educational_analysis || cached.analysis || "",
             improvementSuggestions: normalizeSuggestionList(
-              cached.improvement_suggestions
+              cached.improvement_suggestions,
             ),
             strategyConfig: cached.strategy_config || null,
             strategyName:
-              cached.strategy_name || incomingStrategyType || incomingResults?.strategy_name || '',
+              cached.strategy_name ||
+              incomingStrategyType ||
+              incomingResults?.strategy_name ||
+              "",
             codeId: cached.code_id || null,
             fromBacktest: true,
           },
@@ -825,8 +847,11 @@ const MentorMessages = () => {
       if (cached.conversation_id) {
         activeConversationIdRef.current = cached.conversation_id;
         setActiveConversationId(cached.conversation_id);
-        localStorage.setItem(getLastConversationKey(userId), cached.conversation_id);
-        if (conversationId === 'new') {
+        localStorage.setItem(
+          getLastConversationKey(userId),
+          cached.conversation_id,
+        );
+        if (conversationId === "new") {
           navigate(`/dashboard/mentor/messages/${cached.conversation_id}`, {
             replace: true,
           });
@@ -857,31 +882,34 @@ const MentorMessages = () => {
           data?.analysis ||
           data?.educational_analysis ||
           (data?.verdict || data?.explanation
-            ? `**${data.verdict || 'Analysis'}**\n\n${data.explanation || ''}`
-            : '');
+            ? `**${data.verdict || "Analysis"}**\n\n${data.explanation || ""}`
+            : "");
         const nextConversationId = data?.conversation_id || null;
-        const nextSuggestions = normalizeSuggestionList(data?.improvement_suggestions);
-
+        const nextSuggestions = normalizeSuggestionList(
+          data?.improvement_suggestions,
+        );
 
         setMessages((prev) => {
           const nextTimestamp = data?.timestamp || new Date().toISOString();
-          const nextId = `${nextConversationId || 'analysis'}-${nextTimestamp}`;
+          const nextId = `${nextConversationId || "analysis"}-${nextTimestamp}`;
           const alreadyExists = prev.some(
             (msg) =>
-              msg?.role === 'assistant' &&
+              msg?.role === "assistant" &&
               msg?.timestamp === nextTimestamp &&
-              (msg?.id === nextId ||
-                msg?.content === analysisContent)
+              (msg?.id === nextId || msg?.content === analysisContent),
           );
           if (alreadyExists) return prev;
           return [
             ...prev,
             {
               id: nextId,
-              role: 'assistant',
-              content: analysisContent || 'Analysis completed, but no details were returned.',
+              role: "assistant",
+              content:
+                analysisContent ||
+                "Analysis completed, but no details were returned.",
               code_id: data?.code_id || null,
-              strategy_name: data?.strategy_name || incomingStrategyType || null,
+              strategy_name:
+                data?.strategy_name || incomingStrategyType || null,
               strategy_config: data?.strategy_config || null,
               educational_analysis:
                 data?.educational_analysis || analysisContent || null,
@@ -891,13 +919,15 @@ const MentorMessages = () => {
           ];
         });
 
-        if (conversationId && conversationId !== 'new') {
+        if (conversationId && conversationId !== "new") {
           const nextTimestamp = data?.timestamp || new Date().toISOString();
-          const nextId = `${nextConversationId || 'analysis'}-${nextTimestamp}`;
+          const nextId = `${nextConversationId || "analysis"}-${nextTimestamp}`;
           const nextEntry = {
             id: nextId,
-            role: 'assistant',
-            content: analysisContent || 'Analysis completed, but no details were returned.',
+            role: "assistant",
+            content:
+              analysisContent ||
+              "Analysis completed, but no details were returned.",
             code_id: data?.code_id || null,
             strategy_name: data?.strategy_name || incomingStrategyType || null,
             strategy_config: data?.strategy_config || null,
@@ -908,18 +938,17 @@ const MentorMessages = () => {
           };
           const nextHistory = messages.some(
             (msg) =>
-              msg?.role === 'assistant' &&
+              msg?.role === "assistant" &&
               msg?.timestamp === nextTimestamp &&
-              (msg?.id === nextId || msg?.content === nextEntry.content)
+              (msg?.id === nextId || msg?.content === nextEntry.content),
           )
             ? messages
             : [...messages, nextEntry];
           localStorage.setItem(
             `fgpt_mentor_history_${conversationId}`,
-            JSON.stringify(nextHistory)
+            JSON.stringify(nextHistory),
           );
         }
-
 
         if (isMountedRef.current) {
           setSending(false);
@@ -929,12 +958,15 @@ const MentorMessages = () => {
         if (nextConversationId) {
           activeConversationIdRef.current = nextConversationId;
           setActiveConversationId(nextConversationId);
-          localStorage.setItem(getLastConversationKey(userId), nextConversationId);
+          localStorage.setItem(
+            getLastConversationKey(userId),
+            nextConversationId,
+          );
         }
 
         if (nextConversationId) {
           const preview =
-            lastUserPromptRef.current || analysisContent || 'Backtest analysis';
+            lastUserPromptRef.current || analysisContent || "Backtest analysis";
           updateMentorConversationCache(userId, {
             conversation_id: nextConversationId,
             preview,
@@ -943,22 +975,24 @@ const MentorMessages = () => {
             message_count: 1,
             is_backtest: true,
           });
-          window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
+          window.dispatchEvent(new Event("fgpt-mentor-history-updated"));
 
           // Also refresh from backend in the background so sidebar stays in sync.
           (async () => {
             try {
               await getConversations(userId);
             } catch (error) {
-              logError('Mentor history refresh failed:', error);
+              logError("Mentor history refresh failed:", error);
             } finally {
-              window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
+              window.dispatchEvent(new Event("fgpt-mentor-history-updated"));
             }
           })();
         }
 
         writeAnalysisCache(userId, analysisKey, {
-          analysis: analysisContent || 'Analysis completed, but no details were returned.',
+          analysis:
+            analysisContent ||
+            "Analysis completed, but no details were returned.",
           conversation_id: nextConversationId,
           code_id: data?.code_id || null,
           strategy_name: data?.strategy_name || incomingStrategyType || null,
@@ -970,18 +1004,21 @@ const MentorMessages = () => {
         });
 
         if (state?.skipToImprovement && incomingStrategyCode) {
-          navigate('/dashboard/codegen/session/new', {
+          navigate("/dashboard/codegen/session/new", {
             state: {
-              mode: 'improve',
+              mode: "improve",
               originalCode: incomingStrategyCode,
               backtestResults: incomingResults || {},
-              mentorAnalysis: analysisContent || '',
+              mentorAnalysis: analysisContent || "",
               educationalAnalysis:
-                data?.educational_analysis || analysisContent || '',
+                data?.educational_analysis || analysisContent || "",
               improvementSuggestions: nextSuggestions,
               strategyConfig: data?.strategy_config || null,
               strategyName:
-                data?.strategy_name || incomingStrategyType || incomingResults?.strategy_name || '',
+                data?.strategy_name ||
+                incomingStrategyType ||
+                incomingResults?.strategy_name ||
+                "",
               codeId: data?.code_id || null,
               fromBacktest: true,
             },
@@ -991,8 +1028,8 @@ const MentorMessages = () => {
         clearAnalysisInflight(userId, analysisKey);
       } catch (error) {
         if (!cancelled) {
-          logError('Mentor analysis failed:', error);
-          toast.error(normalizeError(error, { fallback: 'Analysis failed.' }));
+          logError("Mentor analysis failed:", error);
+          toast.error(normalizeError(error, { fallback: "Analysis failed." }));
         }
         clearAnalysisInflight(userId, analysisKey);
         if (isMountedRef.current) {
@@ -1018,13 +1055,13 @@ const MentorMessages = () => {
     };
   }, [conversationId, location.state, userId]);
 
-  const handleCopy = async (text, successMessage = 'Copied to clipboard') => {
+  const handleCopy = async (text, successMessage = "Copied to clipboard") => {
     try {
       await navigator.clipboard.writeText(text);
       toast.success(successMessage);
     } catch (error) {
-      logError('Copy failed:', error);
-      toast.error(normalizeError(error, { fallback: 'Could not copy.' }));
+      logError("Copy failed:", error);
+      toast.error(normalizeError(error, { fallback: "Could not copy." }));
     }
   };
 
@@ -1034,35 +1071,37 @@ const MentorMessages = () => {
 
     const userContent = newMessage.trim();
     const requestContent = shouldRequestDiagram(userContent)
-      ? `${userContent}\n\nReturn ONLY a Mermaid diagram in a \`\`\`mermaid\`\`\` code block. Use FLOWCHART syntax only and keep it valid Mermaid (no extra commentary or data blocks).`
+      ? `${userContent}\n\nReturn ONLY a Mermaid diagram...`
       : userContent;
+
     lastUserPromptRef.current = userContent;
     const userMsg = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: userContent,
       timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => {
       const next = [...prev, userMsg];
-      if (conversationId && conversationId !== 'new') {
+      if (conversationId && conversationId !== "new") {
         localStorage.setItem(
           `fgpt_mentor_history_${conversationId}`,
-          JSON.stringify(next)
+          JSON.stringify(next),
         );
       }
       return next;
     });
 
-    setNewMessage('');
+    setNewMessage("");
     setSending(true);
     sendingRef.current = true;
-    setStreamingContent('');
-    streamAccumulator.current = '';
+    setStreamingContent("");
+    streamAccumulator.current = "";
     streamQueueRef.current = [];
     streamFinalizeRef.current = false;
     streamFinalizedRef.current = false;
+
     if (streamTimerRef.current) {
       clearInterval(streamTimerRef.current);
       streamTimerRef.current = null;
@@ -1076,335 +1115,214 @@ const MentorMessages = () => {
       historyPollRef.current = null;
     }
 
-    // Always prefer the route param when we're inside an existing conversation.
-    // This prevents "same chat creates a new history" when `activeConversationId` is temporarily null.
     const currentConvId =
-      conversationId && conversationId !== 'new' ? conversationId : activeConversationId;
+      conversationId && conversationId !== "new"
+        ? conversationId
+        : activeConversationId;
+
+    // ── FIX: capture isMounted in a local variable so timer closures
+    // always reference THIS render's mounted state, not a stale ref
+    const mountedRef = { current: true };
+    const prevCleanup = isMountedRef.current;
+
+    const finalizeStream = (accumulatedContent) => {
+      if (!mountedRef.current) return;
+
+      const finalContent = accumulatedContent || "No response returned.";
+      const assistantMessage = {
+        id: `${Date.now()}-assistant`,
+        role: "assistant",
+        content: finalContent,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages((prev) => {
+        const next = [...prev, assistantMessage];
+        const targetId =
+          activeConversationIdRef.current || currentConvId || conversationId;
+        if (targetId && targetId !== "new") {
+          localStorage.setItem(
+            `fgpt_mentor_history_${targetId}`,
+            JSON.stringify(next),
+          );
+        }
+        return next;
+      });
+
+      setStreamingContent("");
+      streamAccumulator.current = "";
+      setSending(false);
+      sendingRef.current = false;
+
+      // Sidebar refresh
+      if (typeof window !== "undefined") {
+        (async () => {
+          try {
+            if (activeConversationIdRef.current) {
+              primeMentorConversationCache(
+                activeConversationIdRef.current,
+                lastUserPromptRef.current,
+              );
+            }
+            if (userIdRef.current) await getConversations(userIdRef.current);
+          } catch (error) {
+            logError("Failed to refresh mentor history:", error);
+          } finally {
+            window.dispatchEvent(new Event("fgpt-mentor-history-updated"));
+          }
+        })();
+      }
+
+      // Navigate away from /new
+      if (conversationId === "new") {
+        localStorage.removeItem(getDraftKey(userId));
+        if (activeConversationIdRef.current) {
+          localStorage.setItem(
+            getLastConversationKey(userId),
+            activeConversationIdRef.current,
+          );
+          navigate(
+            `/dashboard/mentor/messages/${activeConversationIdRef.current}`,
+            {
+              replace: true,
+              state: { skipFetch: true },
+            },
+          );
+        }
+      }
+    };
 
     const enqueueChunk = (chunk) => {
       if (!chunk) return;
       const parts = splitRenderableStreamChunk(chunk);
       streamQueueRef.current.push(...parts);
+
       if (!streamTimerRef.current) {
         streamTimerRef.current = setInterval(() => {
-          if (!isMountedRef.current) return;
-          const nextBatch = takeNextRenderableBatch(streamQueueRef.current);
-          if (nextBatch) {
-            setStreamingContent((prev) => prev + nextBatch);
-          }
-          if (streamQueueRef.current.length === 0 && streamFinalizeRef.current) {
-            if (streamTimerRef.current) {
-              clearInterval(streamTimerRef.current);
-              streamTimerRef.current = null;
-            }
+          if (!mountedRef.current) return; // ← use local ref, not isMountedRef
+
+          const nextPart = streamQueueRef.current.shift();
+          if (nextPart) setStreamingContent((prev) => prev + nextPart);
+
+          if (
+            streamQueueRef.current.length === 0 &&
+            streamFinalizeRef.current
+          ) {
+            clearInterval(streamTimerRef.current);
+            streamTimerRef.current = null;
             if (!streamFinalizedRef.current) {
               streamFinalizedRef.current = true;
-              const finalContent =
-                streamAccumulator.current || 'No response returned.';
-              const assistantMessage = {
-                id: `${Date.now()}-assistant`,
-                role: 'assistant',
-                content: finalContent,
-                timestamp: new Date().toISOString(),
-              };
-
-              setMessages((prev) => {
-                const next = [...prev, assistantMessage];
-                const targetId =
-                  activeConversationIdRef.current || currentConvId || conversationId;
-                if (targetId && targetId !== 'new') {
-                  localStorage.setItem(
-                    `fgpt_mentor_history_${targetId}`,
-                    JSON.stringify(next)
-                  );
-                }
-                return next;
-              });
-
-              setStreamingContent('');
-              streamAccumulator.current = '';
-              setSending(false);
-
-              if (typeof window !== 'undefined' && conversationId === 'new') {
-                (async () => {
-                  try {
-                    if (activeConversationIdRef.current) {
-                      primeMentorConversationCache(
-                        activeConversationIdRef.current,
-                        lastUserPromptRef.current
-                      );
-                    }
-                    if (userIdRef.current) {
-                      await getConversations(userIdRef.current);
-                    }
-                  } catch (error) {
-                    logError('Failed to refresh mentor history:', error);
-                  } finally {
-                    window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
-                  }
-                })();
-              }
-
-              if (conversationId === 'new') {
-                localStorage.removeItem(getDraftKey(userId));
-                if (activeConversationIdRef.current) {
-                  localStorage.setItem(
-                    getLastConversationKey(userId),
-                    activeConversationIdRef.current
-                  );
-                  navigate(`/dashboard/mentor/messages/${activeConversationIdRef.current}`, {
-                    replace: true,
-                    state: { skipFetch: true },
-                  });
-                }
-              }
+              finalizeStream(streamAccumulator.current);
             }
           }
         }, STREAM_RENDER_INTERVAL_MS);
       }
     };
 
-    const resetStreamWatchdog = () => {
-      if (streamWatchdogRef.current) {
-        clearTimeout(streamWatchdogRef.current);
+    const handleStreamFailure = (err) => {
+      // Keep detailed reasons in the console only. Users get a generic, stable message.
+      logError("Mentor stream failed:", err);
+      const userSafeMessage = "Failed to send message. Please try again.";
+      toast.error(userSafeMessage);
+      setErrorMessage(userSafeMessage);
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      setStreamingContent("");
+      streamAccumulator.current = "";
+      streamQueueRef.current = [];
+      streamFinalizeRef.current = false;
+      streamFinalizedRef.current = false;
+      if (streamTimerRef.current) {
+        clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
       }
-      streamWatchdogRef.current = setTimeout(() => {
-        if (!streamFinalizedRef.current) {
-          finalizeForce();
-        }
-      }, STREAM_INACTIVITY_TIMEOUT_MS);
-    };
-
-    const finalizeIfIdle = () => {
-      streamFinalizeRef.current = true;
       if (streamWatchdogRef.current) {
         clearTimeout(streamWatchdogRef.current);
         streamWatchdogRef.current = null;
       }
-      if (streamQueueRef.current.length === 0 && !streamFinalizedRef.current) {
-        if (streamTimerRef.current) {
-          clearInterval(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
-        streamFinalizedRef.current = true;
-        const finalContent = streamAccumulator.current || 'No response returned.';
-        const assistantMessage = {
-          id: `${Date.now()}-assistant`,
-          role: 'assistant',
-          content: finalContent,
-          timestamp: new Date().toISOString(),
-        };
+      if (historyPollRef.current) {
+        clearTimeout(historyPollRef.current);
+        historyPollRef.current = null;
+      }
+      setSending(false);
+      sendingRef.current = false;
+    };
 
-        setMessages((prev) => {
-          const next = [...prev, assistantMessage];
-          const targetId =
-            activeConversationIdRef.current || currentConvId || conversationId;
-          if (targetId && targetId !== 'new') {
-            localStorage.setItem(
-              `fgpt_mentor_history_${targetId}`,
-              JSON.stringify(next)
-            );
-          }
-          return next;
-        });
-
-        setStreamingContent('');
-        streamAccumulator.current = '';
-        setSending(false);
-
-        if (typeof window !== 'undefined' && conversationId === 'new') {
-          (async () => {
-            try {
-              if (activeConversationIdRef.current) {
-                primeMentorConversationCache(
-                  activeConversationIdRef.current,
-                  lastUserPromptRef.current
-                );
-              }
-              if (userIdRef.current) {
-                await getConversations(userIdRef.current);
-              }
-            } catch (error) {
-              logError('Failed to refresh mentor history:', error);
-            } finally {
-              window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
-            }
-          })();
-        }
-
-        if (conversationId === 'new') {
-          localStorage.removeItem(getDraftKey(userId));
-          if (activeConversationIdRef.current) {
-            localStorage.setItem(
-              getLastConversationKey(userId),
-              activeConversationIdRef.current
-            );
-            navigate(`/dashboard/mentor/messages/${activeConversationIdRef.current}`, {
+    try {
+      streamMentorResponse({
+        question: requestContent,
+        conversationId: currentConvId,
+        userId,
+        onConversationId: (nextId) => {
+          if (!nextId || nextId === activeConversationIdRef.current) return;
+          activeConversationIdRef.current = nextId;
+          setActiveConversationId(nextId);
+          primeMentorConversationCache(nextId, lastUserPromptRef.current);
+          if (conversationId === "new") {
+            navigate(`/dashboard/mentor/messages/${nextId}`, {
               replace: true,
               state: { skipFetch: true },
             });
           }
-        }
-      }
-    };
-
-    const finalizeForce = () => {
-      streamQueueRef.current = [];
-      streamFinalizeRef.current = true;
-      finalizeIfIdle();
-    };
-
-    resetStreamWatchdog();
-
-    streamMentorResponse({
-      question: requestContent,
-      conversationId: currentConvId,
-      userId,
-      onConversationId: (nextId) => {
-        if (!nextId || nextId === activeConversationIdRef.current) return;
-        activeConversationIdRef.current = nextId;
-        setActiveConversationId(nextId);
-        primeMentorConversationCache(nextId, lastUserPromptRef.current);
-
-        // If we're on `/new`, switch the route immediately so follow-up messages
-        // stay in the same conversation even if rendering/finalization lags.
-        if (conversationId === 'new') {
-          navigate(`/dashboard/mentor/messages/${nextId}`, {
-            replace: true,
-            state: { skipFetch: true },
-          });
-        }
-      },
-      onChunk: (chunk) => {
-        resetStreamWatchdog();
-        streamAccumulator.current += chunk;
-        enqueueChunk(chunk);
-      },
-      onDone: () => {
-        if (streamWatchdogRef.current) {
-          clearTimeout(streamWatchdogRef.current);
-          streamWatchdogRef.current = null;
-        }
-        streamFinalizeRef.current = true;
-        if (!streamTimerRef.current) {
-          streamTimerRef.current = setInterval(() => {
-            if (!isMountedRef.current) return;
-            const nextBatch = takeNextRenderableBatch(streamQueueRef.current);
-            if (nextBatch) {
-              setStreamingContent((prev) => prev + nextBatch);
-            }
-            if (streamQueueRef.current.length === 0 && streamFinalizeRef.current) {
-              if (streamTimerRef.current) {
-                clearInterval(streamTimerRef.current);
-                streamTimerRef.current = null;
-              }
+        },
+        onChunk: (chunk) => {
+          // Reset watchdog on every chunk
+          if (streamWatchdogRef.current) clearTimeout(streamWatchdogRef.current);
+          streamWatchdogRef.current = setTimeout(() => {
+            if (!streamFinalizedRef.current) {
+              streamQueueRef.current = [];
+              streamFinalizeRef.current = true;
               if (!streamFinalizedRef.current) {
                 streamFinalizedRef.current = true;
-                const finalContent =
-                  streamAccumulator.current || 'No response returned.';
-                const assistantMessage = {
-                  id: `${Date.now()}-assistant`,
-                  role: 'assistant',
-                  content: finalContent,
-                  timestamp: new Date().toISOString(),
-                };
-
-                setMessages((prev) => {
-                  const next = [...prev, assistantMessage];
-                  const targetId =
-                    activeConversationIdRef.current || currentConvId || conversationId;
-                  if (targetId && targetId !== 'new') {
-                    localStorage.setItem(
-                      `fgpt_mentor_history_${targetId}`,
-                      JSON.stringify(next)
-                    );
-                  }
-                  return next;
-                });
-
-                setStreamingContent('');
-                streamAccumulator.current = '';
-                setSending(false);
-
-                if (typeof window !== 'undefined' && conversationId === 'new') {
-                  (async () => {
-                    try {
-                      if (activeConversationIdRef.current) {
-                        primeMentorConversationCache(
-                          activeConversationIdRef.current,
-                          lastUserPromptRef.current
-                        );
-                      }
-                      if (userIdRef.current) {
-                        await getConversations(userIdRef.current);
-                      }
-                    } catch (error) {
-                      logError('Failed to refresh mentor history:', error);
-                    } finally {
-                      window.dispatchEvent(new Event('fgpt-mentor-history-updated'));
-                    }
-                  })();
-                }
-
-                if (conversationId === 'new') {
-                  localStorage.removeItem(getDraftKey(userId));
-                  if (activeConversationIdRef.current) {
-                    localStorage.setItem(
-                      getLastConversationKey(userId),
-                      activeConversationIdRef.current
-                    );
-                    navigate(`/dashboard/mentor/messages/${activeConversationIdRef.current}`, {
-                      replace: true,
-                      state: { skipFetch: true },
-                    });
-                  }
-                }
+                finalizeStream(streamAccumulator.current);
               }
             }
-          }, STREAM_RENDER_INTERVAL_MS);
-        }
-        finalizeIfIdle();
-      },
-      onError: (err) => {
-        logError('Mentor stream failed:', err);
-        const msg = normalizeError(err, {
-          fallback: 'Failed to send message. Please try again.',
-        });
-        toast.error(msg);
-        setErrorMessage(msg);
-        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
-        setStreamingContent('');
-        streamAccumulator.current = '';
-        streamQueueRef.current = [];
-        streamFinalizeRef.current = false;
-        streamFinalizedRef.current = false;
-        if (streamTimerRef.current) {
-          clearInterval(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
-        if (streamWatchdogRef.current) {
-          clearTimeout(streamWatchdogRef.current);
-          streamWatchdogRef.current = null;
-        }
-        setSending(false);
-      },
-    });
+          }, STREAM_INACTIVITY_TIMEOUT_MS);
 
-    // If SSE is buffered / disabled in the environment, we can still display the response by polling
-    // the conversation history endpoint until the assistant message is persisted server-side.
+          streamAccumulator.current += chunk;
+          enqueueChunk(chunk);
+        },
+        onDone: () => {
+          if (streamWatchdogRef.current) {
+            clearTimeout(streamWatchdogRef.current);
+            streamWatchdogRef.current = null;
+          }
+          streamFinalizeRef.current = true;
+          // If queue is already empty, finalize immediately
+          if (
+            streamQueueRef.current.length === 0 &&
+            !streamFinalizedRef.current
+          ) {
+            streamFinalizedRef.current = true;
+            finalizeStream(streamAccumulator.current);
+          }
+          // Otherwise the interval timer will finalize when queue drains
+        },
+        onError: handleStreamFailure,
+      });
+    } catch (err) {
+      handleStreamFailure(err);
+    }
+
+    // ── FIX: Poll only when streamAccumulator is STILL empty after a grace period
+    // Don't bail when accumulator fills — that was killing the poll prematurely
     const pollStart = Date.now();
     const pollForStoredReply = async () => {
-      if (!isMountedRef.current) return;
+      if (!mountedRef.current) return;
       if (!sendingRef.current) return;
-      if (streamAccumulator.current) return; // chunks are flowing; let the stream UI handle it
       if (streamFinalizedRef.current) return;
+      // ── REMOVED: if (streamAccumulator.current) return ← this was the bug
+
+      // Only poll if streaming hasn't produced anything yet after 3s
+      if (streamAccumulator.current && Date.now() - pollStart < 3000) {
+        historyPollRef.current = setTimeout(pollForStoredReply, 1000);
+        return;
+      }
 
       const targetConversationId =
         activeConversationIdRef.current ||
-        (conversationId && conversationId !== 'new' ? conversationId : null);
+        (conversationId && conversationId !== "new" ? conversationId : null);
 
       if (!targetConversationId) {
-        // No id to poll yet (new conversation without streamed headers). Retry briefly.
         if (Date.now() - pollStart < MENTOR_REPLY_POLL_TIMEOUT_MS) {
           historyPollRef.current = setTimeout(pollForStoredReply, 750);
         }
@@ -1414,34 +1332,30 @@ const MentorMessages = () => {
       try {
         const res = await getConversationHistory(targetConversationId, userId);
         const history = normalizeMentorMessageHistory(res.history);
-        const userTime = new Date(userMsg.timestamp).getTime();
-        const userContentKey = String(userMsg.content || '').trim();
+        const userContentKey = String(userMsg.content || "").trim();
 
-        // Find the most recent matching user message, then accept any assistant message after it.
-        // Avoid strict timestamp comparisons because some backends reuse timestamps or only store second-level precision.
         let anchorIndex = -1;
-        for (let i = history.length - 1; i >= 0; i -= 1) {
+        for (let i = history.length - 1; i >= 0; i--) {
           const entry = history[i];
-          if (entry?.role !== 'user') continue;
-          const content = String(entry?.content || '').trim();
-          if (!content || content !== userContentKey) continue;
-          const ts = new Date(entry?.timestamp || 0).getTime();
-          if (Number.isFinite(ts) && ts + 30000 < userTime) continue;
+          if (entry?.role !== "user") continue;
+          if (String(entry?.content || "").trim() !== userContentKey) continue;
           anchorIndex = i;
           break;
         }
 
         const hasNewAssistant =
           anchorIndex >= 0 &&
-          history.slice(anchorIndex + 1).some((m) => {
-            if (m?.role !== 'assistant') return false;
-            return Boolean(String(m?.content || '').trim());
-          });
+          history
+            .slice(anchorIndex + 1)
+            .some(
+              (m) => m?.role === "assistant" && String(m?.content || "").trim(),
+            );
 
         if (hasNewAssistant) {
+          if (streamFinalizedRef.current) return; // stream already handled it
           setMessages(history);
-          setStreamingContent('');
-          streamAccumulator.current = '';
+          setStreamingContent("");
+          streamAccumulator.current = "";
           streamQueueRef.current = [];
           streamFinalizeRef.current = true;
           streamFinalizedRef.current = true;
@@ -1454,24 +1368,17 @@ const MentorMessages = () => {
             streamWatchdogRef.current = null;
           }
           setSending(false);
-          if (historyPollRef.current) {
-            clearTimeout(historyPollRef.current);
-            historyPollRef.current = null;
-          }
+          sendingRef.current = false;
           return;
         }
       } catch (error) {
-        // swallow and retry; the user will see an error if we time out
-        logError('Mentor history poll failed:', error);
+        logError("Mentor history poll failed:", error);
       }
 
       if (Date.now() - pollStart >= MENTOR_REPLY_POLL_TIMEOUT_MS) {
-        if (historyPollRef.current) {
-          clearTimeout(historyPollRef.current);
-          historyPollRef.current = null;
-        }
         setSending(false);
-        toast.error('Mentor response timed out. Please try again.');
+        sendingRef.current = false;
+        toast.error("Mentor response timed out. Please try again.");
         return;
       }
 
@@ -1479,19 +1386,32 @@ const MentorMessages = () => {
     };
 
     historyPollRef.current = setTimeout(pollForStoredReply, 750);
-  }, [newMessage, sending, userId, conversationId, activeConversationId]);
+
+    // Cleanup for THIS send invocation
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [
+    newMessage,
+    sending,
+    userId,
+    conversationId,
+    activeConversationId,
+    navigate,
+    primeMentorConversationCache,
+  ]);
 
   const handleGenerateCode = (content) => {
     // Build a concise prompt instead of dumping the full response
-    const strategyType = detectStrategyType(content) || 'trading';
+    const strategyType = detectStrategyType(content) || "trading";
     const extractedLine = extractStrategyLine(content);
     const truncated =
       extractedLine.length > 220
-        ? extractedLine.slice(0, 220).replace(/\s+\S*$/, '') + '...'
+        ? extractedLine.slice(0, 220).replace(/\s+\S*$/, "") + "..."
         : extractedLine;
     const prompt = `Create a ${strategyType} strategy based on: ${truncated}`;
 
-    navigate('/dashboard/codegen/session/new', {
+    navigate("/dashboard/codegen/session/new", {
       state: {
         fromMentor: true,
         strategyType,
@@ -1501,12 +1421,14 @@ const MentorMessages = () => {
     });
   };
 
-  const handleImproveStrategy = async (message = messages[messages.length - 1]) => {
+  const handleImproveStrategy = async (
+    message = messages[messages.length - 1],
+  ) => {
     const strategyCodeFromBacktest =
       backtestData?.strategyCode ||
       backtestData?.results?.custom_code ||
       backtestData?.code ||
-      '';
+      "";
     const codeId = message?.code_id || backtestData?.code_id || null;
     let strategyCode = strategyCodeFromBacktest;
 
@@ -1518,65 +1440,75 @@ const MentorMessages = () => {
           detail?.generated_code ||
           detail?.python_code ||
           detail?.strategy_code ||
-          '';
+          "";
       } catch (error) {
-        logError('Failed to load source strategy code:', error);
+        logError("Failed to load source strategy code:", error);
       }
     }
 
     if (!strategyCode) {
-      toast.error('No strategy code is available to improve.');
+      toast.error("No strategy code is available to improve.");
       return;
     }
 
-    navigate('/dashboard/codegen/session/new', {
+    navigate("/dashboard/codegen/session/new", {
       state: {
-        mode: 'improve',
+        mode: "improve",
         originalCode: strategyCode,
         backtestResults:
           backtestData?.results ||
-          (message?.strategy_name ? { strategy_name: message.strategy_name } : {}),
+          (message?.strategy_name
+            ? { strategy_name: message.strategy_name }
+            : {}),
         mentorAnalysis:
           message?.educational_analysis ||
           message?.content ||
           messages[messages.length - 1]?.content ||
-          '',
-        educationalAnalysis: message?.educational_analysis || '',
+          "",
+        educationalAnalysis: message?.educational_analysis || "",
         improvementSuggestions: normalizeSuggestionList(
-          message?.improvement_suggestions
+          message?.improvement_suggestions,
         ),
-        strategyConfig: message?.strategy_config || backtestData?.strategy_config || null,
+        strategyConfig:
+          message?.strategy_config || backtestData?.strategy_config || null,
         strategyName:
           message?.strategy_name ||
           backtestData?.strategyType ||
           backtestData?.results?.strategy_name ||
-          '',
+          "",
         codeId,
       },
     });
   };
 
   const hasMessages = messages.length > 0 || sending;
+  let lastAssistantIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "assistant") {
+      lastAssistantIndex = i;
+      break;
+    }
+  }
   const mentorSuggestions = [
-    'Explain a simple mean-reversion setup for EUR/USD using RSI.',
-    'Design a trend-following strategy with moving averages and ATR stops.',
-    'How should I size positions with 2% risk per trade?',
-    'Summarize what my backtest metrics say about risk and drawdown.',
+    "Explain a simple mean-reversion setup for EUR/USD using RSI.",
+    "Design a trend-following strategy with moving averages and ATR stops.",
+    "How should I size positions with 2% risk per trade?",
+    "Summarize what my backtest metrics say about risk and drawdown.",
   ];
 
   useEffect(() => {
     const root = document.documentElement;
     if (!hasMessages) {
-      root.classList.add('no-dashboard-scroll');
-      root.classList.remove('has-dashboard-messages');
+      root.classList.add("no-dashboard-scroll");
+      root.classList.remove("has-dashboard-messages");
     } else {
-      root.classList.remove('no-dashboard-scroll');
-      root.classList.add('has-dashboard-messages');
+      root.classList.remove("no-dashboard-scroll");
+      root.classList.add("has-dashboard-messages");
     }
 
     return () => {
-      root.classList.remove('no-dashboard-scroll');
-      root.classList.remove('has-dashboard-messages');
+      root.classList.remove("no-dashboard-scroll");
+      root.classList.remove("has-dashboard-messages");
     };
   }, [hasMessages]);
 
@@ -1623,8 +1555,8 @@ const MentorMessages = () => {
         ref={scrollRef}
         className={`flex-1 min-h-0 p-3 custom-scrollbar ${
           !hasMessages
-            ? 'flex flex-col items-center justify-center overflow-hidden'
-            : 'space-y-3 overflow-y-auto'
+            ? "flex flex-col items-center justify-center overflow-hidden"
+            : "space-y-3 overflow-y-auto"
         }`}
       >
         {errorMessage && (
@@ -1661,17 +1593,17 @@ const MentorMessages = () => {
           <div className="space-y-6 w-full">
             {messages.map((message, idx) => {
               const showGenerateCode =
-                message.role === 'assistant' &&
+                message.role === "assistant" &&
                 Boolean(detectStrategyType(message.content)) &&
                 isCodegenCandidate(message.content);
               const showImproveStrategy =
-                message.role === 'assistant' &&
-                idx === messages.length - 1 &&
+                message.role === "assistant" &&
+                idx === lastAssistantIndex &&
                 Boolean(
                   backtestData?.strategyCode ||
                   backtestData?.results?.custom_code ||
                   backtestData?.code ||
-                  message?.code_id
+                  message?.code_id,
                 );
 
               return (
@@ -1679,24 +1611,31 @@ const MentorMessages = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={message.id || idx}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
                     className={`max-w-[85%] rounded-2xl p-4 transition-all ${
-                      message.role === 'user'
-                        ? 'bg-yellow-600 text-black font-bold shadow-lg shadow-black/20'
-                        : 'bg-white/[0.03] border border-white/5 text-gray-200'
+                      message.role === "user"
+                        ? "bg-yellow-600 text-black font-bold shadow-lg shadow-black/20"
+                        : "bg-white/[0.03] border border-white/5 text-gray-200"
                     }`}
                   >
                     {(() => {
-                      const { markdown, diagram } = extractMermaidBlock(message.content);
+                      const { markdown, diagram } = extractMermaidBlock(
+                        message.content,
+                      );
                       return (
                         <div className="text-sm leading-relaxed max-w-none">
                           {diagram && <MermaidBlock diagram={diagram} />}
                           {markdown && (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                        {message.role === 'user' ? stripDiagramDirective(markdown) : markdown}
-                      </ReactMarkdown>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={MarkdownComponents}
+                            >
+                              {message.role === "user"
+                                ? stripDiagramDirective(markdown)
+                                : markdown}
+                            </ReactMarkdown>
                           )}
                         </div>
                       );
@@ -1727,20 +1666,27 @@ const MentorMessages = () => {
 
                     <div
                       className={`mt-2 flex items-center justify-between gap-4 text-[10px] font-black uppercase tracking-tighter ${
-                        message.role === 'user' ? 'text-white/70' : 'text-gray-600'
+                        message.role === "user"
+                          ? "text-white/70"
+                          : "text-gray-600"
                       }`}
                     >
                       <span>{formatLongDateTime(message.timestamp)}</span>
-                      {message.role === 'assistant' && (
+                      {message.role === "assistant" && (
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleCopy(message.content, 'Message copied')}
+                            onClick={() =>
+                              handleCopy(message.content, "Message copied")
+                            }
                             className="hover:text-yellow-500"
                           >
                             <FiCopy />
                           </button>
-                          <button type="button" className="hover:text-yellow-500">
+                          <button
+                            type="button"
+                            className="hover:text-yellow-500"
+                          >
                             <FiThumbsUp />
                           </button>
                         </div>
@@ -1778,7 +1724,9 @@ const MentorMessages = () => {
       </div>
 
       {/* Input — at bottom when messages exist, centered when empty */}
-      <div className={`${hasMessages ? 'sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0' : 'p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0'}`}>
+      <div
+        className={`${hasMessages ? "sticky bottom-0 z-10 p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0" : "p-6 bg-white/[0.02] border-t border-white/5 flex-shrink-0"}`}
+      >
         <div className="relative group w-full">
           <textarea
             value={newMessage}
@@ -1789,7 +1737,7 @@ const MentorMessages = () => {
             rows={1}
             className="w-full bg-black/40 border border-white/10 rounded-2xl pl-6 pr-16 py-4 text-sm text-white focus:outline-none focus:border-yellow-500/30 transition-all font-medium placeholder-gray-600 disabled:opacity-50 resize-none overflow-y-auto"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();
               }

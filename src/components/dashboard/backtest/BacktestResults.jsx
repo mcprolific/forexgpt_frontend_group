@@ -292,12 +292,14 @@ const BacktestResults = ({
             return;
         }
 
+        const prefilledQuestion = `Analyze why this backtest failed and what to change. Strategy: ${selectedStrategy || 'custom'}. Pair: ${results?.pair || results?.metrics?.pair || 'N/A'}. Period: ${results?.start_date || results?.metrics?.start_date || 'N/A'} to ${results?.end_date || results?.metrics?.end_date || 'N/A'}. Focus on drawdown, profit factor, win rate vs avg win/loss, and expectancy. Provide actionable fixes.`;
         navigate('/dashboard/mentor/messages/new', {
             state: {
                 mode: 'analyze',
                 strategyCode: customCode,
                 strategyType: selectedStrategy,
-                results: results
+                results: results,
+                prefilledQuestion,
             }
         });
     };
