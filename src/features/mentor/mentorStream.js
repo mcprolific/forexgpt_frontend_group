@@ -6,6 +6,13 @@ const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
   "http://127.0.0.1:8000";
 
+// Streaming (SSE) can be buffered/blocked in some local or proxied setups.
+// Default to non-streaming unless explicitly enabled.
+const USE_SSE_STREAMING =
+  (typeof import.meta !== "undefined" &&
+    String(import.meta.env?.VITE_MENTOR_USE_SSE || "").toLowerCase() === "true") ||
+  false;
+
 const splitFallbackText = (text) => {
   if (!text) return [];
 
@@ -230,12 +237,15 @@ export async function streamMentorResponse({
     ...(userId ? { user_id: userId } : {}),
   });
   let streamedText = "";
+  let gotFirstChunk = false;
   let hasDeliveredContent = false;
 
   const emitChunk = (chunk) => {
     const nextChunk =
       typeof chunk === "string" ? chunk : String(chunk || "");
     if (!nextChunk) return;
+
+    gotFirstChunk = true;
 
     if (streamedText && nextChunk.startsWith(streamedText)) {
       const delta = nextChunk.slice(streamedText.length);
@@ -253,7 +263,7 @@ export async function streamMentorResponse({
     onChunk(nextChunk);
   };
 
-  const runStream = async (authToken) => {
+  const runStream = async (authToken, signal) => {
     const nextHeaders = {
       ...headers,
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -262,6 +272,7 @@ export async function streamMentorResponse({
       method: "POST",
       headers: nextHeaders,
       body,
+      signal,
     });
     return response;
   };
@@ -284,12 +295,46 @@ export async function streamMentorResponse({
   };
 
   try {
-    let response = await runStream(access);
+    if (!USE_SSE_STREAMING) {
+      const fallback = await runFallback(access);
+      if (fallback.status === 401 && refresh) {
+        const nextToken = await tryRefreshToken(refresh);
+        const retry = await runFallback(nextToken);
+        if (!retry.ok) throw new Error(`Mentor API error: ${retry.status}`);
+        const data = await retry.json();
+        if (data?.conversation_id && onConversationId) {
+          onConversationId(data.conversation_id);
+        }
+        const text = extractTextCandidate(data) || "Ok.";
+        await emitFallbackStream(text, emitChunk);
+        onDone();
+        return;
+      }
+
+      if (!fallback.ok) throw new Error(`Mentor API error: ${fallback.status}`);
+      const data = await fallback.json();
+      if (data?.conversation_id && onConversationId) {
+        onConversationId(data.conversation_id);
+      }
+      const text = extractTextCandidate(data) || "Ok.";
+      await emitFallbackStream(text, emitChunk);
+      onDone();
+      return;
+    }
+
+    const controller = new AbortController();
+    // If the streaming endpoint accepts the request but doesn't send chunks (or is buffered by a proxy),
+    // fall back quickly so the UI doesn't appear "stuck until navigation".
+    const fallbackTimer = setTimeout(() => {
+      if (!gotFirstChunk) controller.abort();
+    }, 1500);
+
+    let response = await runStream(access, controller.signal);
 
     if (response.status === 401 && refresh) {
       try {
         const nextToken = await tryRefreshToken(refresh);
-        response = await runStream(nextToken);
+        response = await runStream(nextToken, controller.signal);
       } catch {
         // keep response as 401 for fallback handling below
       }
@@ -303,8 +348,9 @@ export async function streamMentorResponse({
       onConversationId(headerConversationId);
     }
 
-    // --- Fallback: streaming endpoint not yet deployed ---
+    // --- Fallback: streaming endpoint not yet deployed / unauthorized / no body ---
     if (response.status === 404 || response.status === 401 || !response.body) {
+      clearTimeout(fallbackTimer);
       const { access: latestAccess } = readTokenPair();
       const fallback = await runFallback(latestAccess);
       if (!fallback.ok) throw new Error(`Mentor API error: ${fallback.status}`);
@@ -319,6 +365,7 @@ export async function streamMentorResponse({
     }
 
     if (!response.ok) {
+      clearTimeout(fallbackTimer);
       throw new Error(`Mentor streaming API error: ${response.status}`);
     }
 
@@ -354,6 +401,7 @@ export async function streamMentorResponse({
 
       for (const frame of frames) {
         if (processSseFrame(frame, { onChunk: emitChunk, onDone, onConversationId })) {
+          clearTimeout(fallbackTimer);
           return;
         }
       }
@@ -368,6 +416,7 @@ export async function streamMentorResponse({
 
       for (const frame of trailingFrames) {
         if (processSseFrame(frame, { onChunk: emitChunk, onDone, onConversationId })) {
+          clearTimeout(fallbackTimer);
           return;
         }
       }
@@ -384,8 +433,31 @@ export async function streamMentorResponse({
       }
     }
 
+    clearTimeout(fallbackTimer);
     onDone();
   } catch (err) {
+    // If the stream was aborted due to no chunks, fall back to the non-streaming endpoint.
+    if (err?.name === "AbortError") {
+      try {
+        const { access: latestAccess } = readTokenPair();
+        const fallback = await runFallback(latestAccess);
+        if (!fallback.ok) throw new Error(`Mentor API error: ${fallback.status}`);
+        const data = await fallback.json();
+        if (data?.conversation_id && onConversationId) {
+          onConversationId(data.conversation_id);
+        }
+        const fallbackText = extractTextCandidate(data) || "Ok.";
+        await emitFallbackStream(fallbackText, emitChunk);
+        onDone();
+        return;
+      } catch (fallbackErr) {
+        onError(
+          fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr))
+        );
+        return;
+      }
+    }
+
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
