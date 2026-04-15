@@ -84,9 +84,10 @@ const getAnalysisCacheKey = (userId, key) =>
 const getAnalysisInflightKey = (userId, key) =>
   `fgpt_mentor_backtest_inflight_${userId || 'anon'}_${key || 'unknown'}`;
 
-const STREAM_RENDER_INTERVAL_MS = 35;
-const STREAM_RENDER_MAX_PART_SIZE = 4;
+const STREAM_RENDER_INTERVAL_MS = 20;
+const STREAM_RENDER_MAX_PART_SIZE = 24;
 const STREAM_INACTIVITY_TIMEOUT_MS = 20000;
+const MENTOR_REPLY_POLL_TIMEOUT_MS = 90000;
 
 const splitRenderableStreamChunk = (chunk) => {
   if (!chunk) return [];
@@ -535,6 +536,8 @@ const MentorMessages = () => {
   const streamFinalizeRef = useRef(false);
   const streamFinalizedRef = useRef(false);
   const streamWatchdogRef = useRef(null);
+  const historyPollRef = useRef(null);
+  const sendingRef = useRef(false);
   const activeConversationIdRef = useRef(activeConversationId);
   const { user } = useSelector((state) => state.auth);
   const userId = user?.user_id || user?.id;
@@ -549,6 +552,10 @@ const MentorMessages = () => {
   }, [userId]);
 
   useEffect(() => {
+    sendingRef.current = sending;
+  }, [sending]);
+
+  useEffect(() => {
     return () => {
       isMountedRef.current = false;
       if (streamTimerRef.current) {
@@ -558,6 +565,10 @@ const MentorMessages = () => {
       if (streamWatchdogRef.current) {
         clearTimeout(streamWatchdogRef.current);
         streamWatchdogRef.current = null;
+      }
+      if (historyPollRef.current) {
+        clearTimeout(historyPollRef.current);
+        historyPollRef.current = null;
       }
     };
   }, []);
@@ -1021,6 +1032,7 @@ const MentorMessages = () => {
 
     setNewMessage('');
     setSending(true);
+    sendingRef.current = true;
     setStreamingContent('');
     streamAccumulator.current = '';
     streamQueueRef.current = [];
@@ -1034,8 +1046,15 @@ const MentorMessages = () => {
       clearTimeout(streamWatchdogRef.current);
       streamWatchdogRef.current = null;
     }
+    if (historyPollRef.current) {
+      clearTimeout(historyPollRef.current);
+      historyPollRef.current = null;
+    }
 
-    const currentConvId = activeConversationId;
+    // Always prefer the route param when we're inside an existing conversation.
+    // This prevents "same chat creates a new history" when `activeConversationId` is temporarily null.
+    const currentConvId =
+      conversationId && conversationId !== 'new' ? conversationId : activeConversationId;
 
     const enqueueChunk = (chunk) => {
       if (!chunk) return;
@@ -1221,6 +1240,15 @@ const MentorMessages = () => {
         activeConversationIdRef.current = nextId;
         setActiveConversationId(nextId);
         primeMentorConversationCache(nextId, lastUserPromptRef.current);
+
+        // If we're on `/new`, switch the route immediately so follow-up messages
+        // stay in the same conversation even if rendering/finalization lags.
+        if (conversationId === 'new') {
+          navigate(`/dashboard/mentor/messages/${nextId}`, {
+            replace: true,
+            state: { skipFetch: true },
+          });
+        }
       },
       onChunk: (chunk) => {
         resetStreamWatchdog();
@@ -1336,6 +1364,96 @@ const MentorMessages = () => {
         setSending(false);
       },
     });
+
+    // If SSE is buffered / disabled in the environment, we can still display the response by polling
+    // the conversation history endpoint until the assistant message is persisted server-side.
+    const pollStart = Date.now();
+    const pollForStoredReply = async () => {
+      if (!isMountedRef.current) return;
+      if (!sendingRef.current) return;
+      if (streamAccumulator.current) return; // chunks are flowing; let the stream UI handle it
+      if (streamFinalizedRef.current) return;
+
+      const targetConversationId =
+        activeConversationIdRef.current ||
+        (conversationId && conversationId !== 'new' ? conversationId : null);
+
+      if (!targetConversationId) {
+        // No id to poll yet (new conversation without streamed headers). Retry briefly.
+        if (Date.now() - pollStart < MENTOR_REPLY_POLL_TIMEOUT_MS) {
+          historyPollRef.current = setTimeout(pollForStoredReply, 750);
+        }
+        return;
+      }
+
+      try {
+        const res = await getConversationHistory(targetConversationId, userId);
+        const history = normalizeMentorMessageHistory(res.history);
+        const userTime = new Date(userMsg.timestamp).getTime();
+        const userContentKey = String(userMsg.content || '').trim();
+
+        // Find the most recent matching user message, then accept any assistant message after it.
+        // Avoid strict timestamp comparisons because some backends reuse timestamps or only store second-level precision.
+        let anchorIndex = -1;
+        for (let i = history.length - 1; i >= 0; i -= 1) {
+          const entry = history[i];
+          if (entry?.role !== 'user') continue;
+          const content = String(entry?.content || '').trim();
+          if (!content || content !== userContentKey) continue;
+          const ts = new Date(entry?.timestamp || 0).getTime();
+          if (Number.isFinite(ts) && ts + 30000 < userTime) continue;
+          anchorIndex = i;
+          break;
+        }
+
+        const hasNewAssistant =
+          anchorIndex >= 0 &&
+          history.slice(anchorIndex + 1).some((m) => {
+            if (m?.role !== 'assistant') return false;
+            return Boolean(String(m?.content || '').trim());
+          });
+
+        if (hasNewAssistant) {
+          setMessages(history);
+          setStreamingContent('');
+          streamAccumulator.current = '';
+          streamQueueRef.current = [];
+          streamFinalizeRef.current = true;
+          streamFinalizedRef.current = true;
+          if (streamTimerRef.current) {
+            clearInterval(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          if (streamWatchdogRef.current) {
+            clearTimeout(streamWatchdogRef.current);
+            streamWatchdogRef.current = null;
+          }
+          setSending(false);
+          if (historyPollRef.current) {
+            clearTimeout(historyPollRef.current);
+            historyPollRef.current = null;
+          }
+          return;
+        }
+      } catch (error) {
+        // swallow and retry; the user will see an error if we time out
+        logError('Mentor history poll failed:', error);
+      }
+
+      if (Date.now() - pollStart >= MENTOR_REPLY_POLL_TIMEOUT_MS) {
+        if (historyPollRef.current) {
+          clearTimeout(historyPollRef.current);
+          historyPollRef.current = null;
+        }
+        setSending(false);
+        toast.error('Mentor response timed out. Please try again.');
+        return;
+      }
+
+      historyPollRef.current = setTimeout(pollForStoredReply, 1000);
+    };
+
+    historyPollRef.current = setTimeout(pollForStoredReply, 750);
   }, [newMessage, sending, userId, conversationId, activeConversationId]);
 
   const handleGenerateCode = (content) => {
@@ -1617,21 +1735,9 @@ const MentorMessages = () => {
               >
                 <div className="max-w-[85%] bg-white/[0.03] border border-white/5 rounded-2xl p-4">
                   {streamingContent ? (
-                    <>
-                      {(() => {
-                        const { markdown, diagram } = extractMermaidBlock(streamingContent);
-                        return (
-                          <div className="text-sm leading-relaxed text-gray-200 max-w-none">
-                            {diagram && <MermaidBlock diagram={diagram} />}
-                            {markdown && (
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                                {markdown}
-                              </ReactMarkdown>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </>
+                    <div className="text-sm leading-relaxed text-gray-200 whitespace-pre-wrap">
+                      {streamingContent}
+                    </div>
                   ) : (
                     <div className="flex gap-2">
                       <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-bounce" />

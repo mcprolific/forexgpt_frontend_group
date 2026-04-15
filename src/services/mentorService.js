@@ -295,14 +295,59 @@ const normalizeHistoryEntry = (item, index) => {
 
 export const normalizeMentorMessageHistory = (payload) => {
   const rawHistory = normalizeHistory(payload);
-  const dedupe = new Set();
+  const seenIds = new Set();
+  const seenKeys = new Set();
+  const normalized = rawHistory.flatMap(normalizeHistoryEntry).filter(Boolean);
 
-  return rawHistory.flatMap(normalizeHistoryEntry).filter((message) => {
-    const key = [message.role, message.timestamp, message.content].join("|");
-    if (dedupe.has(key)) return false;
-    dedupe.add(key);
-    return true;
-  });
+  // Preserve backend order when timestamps are missing, but make ordering stable when present.
+  const sorted = normalized
+    .map((msg, index) => ({ msg, index }))
+    .sort((a, b) => {
+      const at = new Date(a.msg.timestamp || 0).getTime();
+      const bt = new Date(b.msg.timestamp || 0).getTime();
+      const aValid = Number.isFinite(at) && at > 0;
+      const bValid = Number.isFinite(bt) && bt > 0;
+      if (aValid && bValid && at !== bt) return at - bt;
+      return a.index - b.index;
+    })
+    .map(({ msg }) => msg);
+
+  const output = [];
+  for (const message of sorted) {
+    const id = message?.id ? String(message.id) : "";
+    const role = String(message?.role || "");
+    const content = String(message?.content || "").trim();
+    const ts = new Date(message?.timestamp || 0).getTime();
+
+    if (id) {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+    }
+
+    // Collapse exact duplicates even when timestamps differ (some backends persist duplicates).
+    const contentKey = `${role}|${content}`;
+    if (seenKeys.has(contentKey)) {
+      const prev = output[output.length - 1];
+      const prevRole = String(prev?.role || "");
+      const prevContent = String(prev?.content || "").trim();
+      const prevTs = new Date(prev?.timestamp || 0).getTime();
+      const isSame = prevRole === role && prevContent === content;
+      const closeInTime =
+        Number.isFinite(ts) &&
+        Number.isFinite(prevTs) &&
+        ts > 0 &&
+        prevTs > 0 &&
+        Math.abs(ts - prevTs) < 2000;
+      if (isSame || closeInTime) {
+        continue;
+      }
+    }
+
+    seenKeys.add(contentKey);
+    output.push({ ...message, content });
+  }
+
+  return output;
 };
 
 // ==============================
@@ -399,9 +444,11 @@ export const getConversations = async (userId, limit = 500) => {
 // ==============================
 // GET HISTORY
 // ==============================
-export const getConversationHistory = async (conversationId, userId) => {
+export const getConversationHistory = async (conversationId, userId, limit = 500) => {
   try {
     const candidates = [
+      `/mentor/conversations/${conversationId}?limit=${limit}`,
+      `/mentor/conversations/${conversationId}`,
       `/mentor/conversations/${userId}/${conversationId}`,
       `/mentor/history/${userId}/${conversationId}`,
       `/mentor/history?user_id=${userId}&conversation_id=${conversationId}`,
