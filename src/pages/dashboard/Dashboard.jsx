@@ -17,10 +17,69 @@ import { useAuth } from '../../contexts/AuthContext'
 import { getDashboardStats } from '../../services/userService'
 import { getUnifiedActivityLogs } from '../../services/activityService'
 import { getForexNews } from '../../services/newsService'
+import { getSignalStats, getUserSignals } from '../../services/signalService'
+import { getBacktestResults } from '../../services/backtestService'
+import { getConversations as getMentorConversations } from '../../services/mentorService'
 import LoadingScreen from '../../components/ui/LoadingScreen'
 
 const GOLD = "#D4AF37";
 const GOLD_LIGHT = "#FFD700";
+
+const asNumber = (value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+const preferNonZero = (primary, fallback) => {
+  const primaryNum = asNumber(primary);
+  const fallbackNum = asNumber(fallback);
+  if (primaryNum == null) return fallbackNum;
+  if (primaryNum === 0 && (fallbackNum || 0) > 0) return fallbackNum;
+  return primaryNum;
+};
+
+const countCompletedBacktests = (backtests) => {
+  if (!Array.isArray(backtests)) return 0;
+  const completed = backtests.filter((item) => {
+    const status = String(item?.status || "").toLowerCase();
+    if (!status) return true;
+    return ["completed", "complete", "done", "success", "finished"].some((s) =>
+      status.includes(s)
+    );
+  });
+  return completed.length;
+};
+
+const deriveDashboardStats = async (userId) => {
+  const signalStatsPromise = userId
+    ? getSignalStats(userId).catch(async () => {
+        const signals = await getUserSignals(userId, 500);
+        return { total_signals: Array.isArray(signals) ? signals.length : 0 };
+      })
+    : Promise.resolve(null);
+
+  const [signalsResult, backtestsResult, mentorResult] = await Promise.allSettled([
+    signalStatsPromise,
+    userId ? getBacktestResults(userId, 500, 0) : Promise.resolve([]),
+    userId ? getMentorConversations(userId, 500) : Promise.resolve([]),
+  ]);
+
+  const totalSignals =
+    signalsResult.status === "fulfilled"
+      ? asNumber(signalsResult.value?.total_signals) ?? 0
+      : 0;
+
+  const backtests =
+    backtestsResult.status === "fulfilled" ? backtestsResult.value : [];
+
+  const mentorConversations =
+    mentorResult.status === "fulfilled" ? mentorResult.value : [];
+
+  return {
+    total_signals: totalSignals,
+    completed_backtests: countCompletedBacktests(backtests),
+    active_mentor_conversations: Array.isArray(mentorConversations)
+      ? mentorConversations.length
+      : 0,
+  };
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -43,12 +102,62 @@ const Dashboard = () => {
         // Fetch news separately so it doesn't block on stats errors
         getForexNews().then(data => setNews(data || []));
 
-        const [statsData, activitiesData] = await Promise.all([
-          getDashboardStats(),
-          getUnifiedActivityLogs(userId, 5)
+        const [statsResult, activitiesResult, derivedStatsResult] = await Promise.allSettled([
+          getDashboardStats(userId),
+          getUnifiedActivityLogs(userId, 5),
+          deriveDashboardStats(userId),
         ]);
-        setStats(statsData);
-        setActivities(activitiesData);
+
+        const derivedStats =
+          derivedStatsResult.status === "fulfilled" ? derivedStatsResult.value : null;
+
+        if (statsResult.status === "fulfilled") {
+          const remoteStats = statsResult.value || {};
+          const merged = {
+            ...remoteStats,
+            ...(derivedStats
+              ? {
+                  active_mentor_conversations: preferNonZero(
+                    remoteStats?.active_mentor_conversations,
+                    derivedStats.active_mentor_conversations
+                  ),
+                  total_signals: preferNonZero(
+                    remoteStats?.total_signals,
+                    derivedStats.total_signals
+                  ),
+                  completed_backtests: preferNonZero(
+                    remoteStats?.completed_backtests,
+                    derivedStats.completed_backtests
+                  ),
+                }
+              : {}),
+          };
+
+          setStats(merged);
+        } else {
+          setStats(derivedStats || null);
+          const error = statsResult.reason;
+          console.warn("Dashboard stats request failed:", {
+            status: error?.response?.status,
+            url: error?.config?.url,
+            data: error?.response?.data,
+            message: error?.message,
+            derived: derivedStats,
+          });
+        }
+
+        if (activitiesResult.status === "fulfilled") {
+          setActivities(activitiesResult.value);
+        } else {
+          setActivities([]);
+          const error = activitiesResult.reason;
+          console.warn("Dashboard activity request failed:", {
+            status: error?.response?.status,
+            url: error?.config?.url,
+            data: error?.response?.data,
+            message: error?.message,
+          });
+        }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
