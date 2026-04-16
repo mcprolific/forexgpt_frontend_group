@@ -791,6 +791,7 @@ const MentorMessages = () => {
       strategyType: incomingStrategyType,
       strategyCode: incomingStrategyCode,
       results: incomingResults,
+      fromBacktestAnalysis: Boolean(state?.fromBacktestAnalysis)
     };
 
     if (!userId || state?.mode !== "analyze" || !incomingResults) {
@@ -1600,6 +1601,7 @@ const MentorMessages = () => {
                 message.role === "assistant" &&
                 idx === lastAssistantIndex &&
                 Boolean(
+                  backtestData?.fromBacktestAnalysis ||
                   backtestData?.strategyCode ||
                   backtestData?.results?.custom_code ||
                   backtestData?.code ||
