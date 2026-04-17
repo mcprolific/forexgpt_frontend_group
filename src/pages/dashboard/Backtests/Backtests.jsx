@@ -106,6 +106,7 @@ const Backtests = () => {
     result?.custom_code ||
     result?.strategy_code ||
     '';
+
   const expectancy = result?.metrics ? calculateExpectancy(result.metrics) : null;
   const performanceVerdict = result?.metrics ? classifyPerformance(result.metrics, expectancy) : null;
   const metricsForMentor = result?.metrics
