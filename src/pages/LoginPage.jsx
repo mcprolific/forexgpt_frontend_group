@@ -237,7 +237,7 @@ const LoginPage = () => {
                 transition={{ delay: 0.2 }}
                 style={{ fontFamily: "'Outfit', sans-serif" }}
               >
-                Secure <span className="bg-gradient-to-r from-[#FFD700] via-[#D4AF37] to-[#FFD700] bg-clip-text text-transparent">Quantum</span> Portal
+                Secured <span className="bg-gradient-to-r from-[#FFD700] via-[#D4AF37] to-[#FFD700] bg-clip-text text-transparent">Quantum</span> Portal
               </Motion.h1>
               <p className="text-gray-400 text-lg max-w-md">
                 Log in to access your institutional-grade trading dashboard and AI-driven confluence tools.
