@@ -117,7 +117,7 @@ const PublicNavbar = () => {
                   onMouseLeave={() => setOpenFlyout(null)}
                 >
                   <div
-                    className="w-[520px] bg-zinc-900/95 backdrop-blur-xl border rounded-2xl p-5"
+                    className="w-[720px] bg-zinc-900/95 backdrop-blur-xl border rounded-2xl p-5"
                     style={{ borderColor: 'rgba(212,175,55,0.2)', boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.08)' }}
                   >
                     {/* About links */}

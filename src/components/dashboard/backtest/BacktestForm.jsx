@@ -40,90 +40,6 @@ const normalizePairForApi = (pair) =>
         .slice(0, 6);
 
 
-//STRONG normalization function
-const fixPythonIndentation = (code) => {
-    if (!code) return '';
-    
-    // Split into lines
-    let lines = code.split(/\r?\n/);
-    
-    // Remove empty lines at start and end
-    while (lines.length > 0 && lines[0].trim() === '') lines.shift();
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
-    
-    // Process each line
-    const processedLines = [];
-    let currentIndent = 0;
-    let inMultilineString = false;
-    let multilineDelimiter = null;
-    
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        
-        // Track if we're inside a multiline string (to avoid messing with indentation there)
-        for (let j = 0; j < line.length - 2; j++) {
-            if (line[j] === '"""' || line[j] === "'''") {
-                if (!inMultilineString) {
-                    inMultilineString = true;
-                    multilineDelimiter = line[j];
-                } else if (line[j] === multilineDelimiter && line[j+1] === multilineDelimiter && line[j+2] === multilineDelimiter) {
-                    inMultilineString = false;
-                    multilineDelimiter = null;
-                    j += 2;
-                }
-            }
-        }
-        
-        // Skip indentation processing for multiline strings
-        if (inMultilineString) {
-            processedLines.push(line);
-            continue;
-        }
-        
-        // Remove all existing indentation
-        const strippedLine = line.trimStart();
-        
-        // Skip empty lines
-        if (strippedLine === '') {
-            processedLines.push('');
-            continue;
-        }
-        
-        // Adjust indentation based on Python keywords
-        let newIndent = currentIndent;
-        
-        // Dedent for these keywords (they should be at same level as previous block)
-        if (strippedLine.match(/^(else|elif|except|finally|except\s+.*?:)/)) {
-            newIndent = Math.max(0, currentIndent - 4);
-        }
-        
-        // Apply indentation
-        const indentedLine = ' '.repeat(newIndent) + strippedLine;
-        processedLines.push(indentedLine);
-        
-        // Increase indent for blocks (lines ending with colon and not a comment)
-        if (strippedLine.endsWith(':') && !strippedLine.startsWith('#')) {
-            currentIndent += 4;
-        }
-        
-        // Reset indent if we dedented
-        if (newIndent !== currentIndent) {
-            currentIndent = newIndent;
-        }
-    }
-    
-    // Rejoin and ensure proper line endings
-    let fixed = processedLines.join('\n');
-    
-    // Final cleanup: ensure all indentation is spaces, no tabs
-    fixed = fixed.replace(/\t/g, '    ');
-    
-    // Ensure there are no mixed spaces (convert any 2-space indents to 4-space)
-    fixed = fixed.replace(/^ {2}(?= )/gm, '    ');
-    
-    return fixed;
-};
-
 /* ─── Component ───────────────────────────────────────────── */
 const BacktestForm = () => {
     const { user } = useAuth();
@@ -233,10 +149,9 @@ const BacktestForm = () => {
             let result;
 
             if (form.strategy_name === 'custom') {
-                const fixedCode = fixPythonIndentation(customCode);
                 const customPayload = {
                     user_id: String(userId),
-                    custom_code: fixedCode,
+                    custom_code: customCode,
                     pair: normalizePairForApi(form.pair) || 'EURUSD',
                     start_date: form.start_date,
                     end_date: form.end_date,
