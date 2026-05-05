@@ -296,9 +296,7 @@ const BacktestForm = () => {
                           <option value="rsi">RSI Mean Reversion (Built-in)</option>
                           <option value="macd">MACD Strategy (Built-in)</option>
                           <option value="bollinger">Bollinger Bands (Built-in)</option>
-                          {(location.state?.mode === 'custom' || !!customCode) && (
-                            <option value="custom">Custom Strategy</option>
-                          )}
+                          <option value="custom">Custom Strategy</option>
                         </select>
                     </div>
                 </div>
@@ -496,41 +494,77 @@ const BacktestForm = () => {
                 <div className="border-t border-white/5" />
 
                 {/* ── Custom Strategy Handling ─────────────────────────────────────────────── */}
-                {selectedStrategy === 'custom' && !customCode && (
-                  <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden mb-6 p-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-red-400">
-                        <FiAlertCircle className="w-5 h-5 flex-shrink-0" />
-                        <div className="text-sm">Cannot run Custom Strategy: No code loaded.</div>
-                    </div>
-                    <button 
-                        type="button" 
-                        onClick={() => navigate('/dashboard/codegen/session/new')} 
-                        className="text-xs font-bold px-4 py-2 bg-yellow-500/10 text-yellow-500 rounded-lg hover:bg-yellow-500 hover:text-black transition-colors"
-                    >
-                        Go to CodeGen
-                    </button>
-                  </div>
-                )}
-
-                {selectedStrategy === 'custom' && customCode && (
+                {selectedStrategy === 'custom' && (
                   <div className="code-preview bg-white/5 border border-white/10 rounded-2xl overflow-hidden mb-6 p-5">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 text-green-400">
+                        <div className="flex items-center gap-2 text-yellow-500">
                             <FiCode className="w-4 h-4" />
-                            <h3 className="text-[11px] font-bold uppercase tracking-widest m-0">✓ Custom Code Loaded</h3>
+                            <h3 className="text-[11px] font-bold uppercase tracking-widest m-0">
+                                {customCode ? 'Custom Strategy Code' : 'Load Custom Strategy'}
+                            </h3>
                         </div>
-                        <button 
-                            type="button"
-                            onClick={() => setShowCodePreview(!showCodePreview)}
-                            className="text-[10px] font-black uppercase text-gray-400 hover:text-white pb-1 border-b border-gray-600 hover:border-white transition-colors"
-                        >
-                          {showCodePreview ? 'Hide Code' : 'Show Code'}
-                        </button>
+                        {customCode && (
+                            <button 
+                                type="button"
+                                onClick={() => setShowCodePreview(!showCodePreview)}
+                                className="text-[10px] font-black uppercase text-gray-400 hover:text-white pb-1 border-b border-gray-600 hover:border-white transition-colors"
+                            >
+                              {showCodePreview ? 'Hide Code' : 'Show Code'}
+                            </button>
+                        )}
                     </div>
-                    {showCodePreview && (
-                        <pre className="bg-[#0D0D0D] p-4 rounded-xl text-[11px] text-gray-400 overflow-x-auto whitespace-pre-wrap border border-white/5 font-mono leading-relaxed mt-2 max-h-64 overflow-y-auto w-full">
-                            <code>{customCode}</code>
-                        </pre>
+                    
+                    {(!customCode || showCodePreview) && (
+                        <div className="space-y-3">
+                            <textarea
+                                value={customCode}
+                                onChange={(e) => setCustomCode(e.target.value)}
+                                placeholder="Paste your Python strategy code here... (Must define a generate_signals(data) function)"
+                                className="w-full bg-[#0D0D0D] p-4 rounded-xl text-[11px] text-gray-300 border border-white/5 font-mono leading-relaxed h-64 focus:border-yellow-500/30 focus:outline-none transition-all resize-none"
+                            />
+                            <div className="flex justify-between items-center">
+                                <p className="text-[9px] text-gray-500 italic">
+                                    Your code must include a `generate_signals(data)` function that returns a DataFrame with 'signal' column.
+                                </p>
+                                {customCode && (
+                                    <div className="flex items-center gap-4">
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                // Trigger formatting by re-setting the code
+                                                // The backend will handle the normalization, 
+                                                // but we can also do a simple client-side clean
+                                                setCustomCode(prev => prev.trim());
+                                                toast.info('Code cleaned. Auto-formatting will apply on run.');
+                                            }}
+                                            className="text-[9px] font-black uppercase text-yellow-500/70 hover:text-yellow-500 transition-colors"
+                                        >
+                                            Clean Code
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setCustomCode('')}
+                                            className="text-[9px] font-black uppercase text-red-500/70 hover:text-red-500 transition-colors"
+                                        >
+                                            Clear Code
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {customCode && !showCodePreview && (
+                        <div className="py-2 px-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-green-400 uppercase tracking-widest">✓ Code Ready for Simulation</span>
+                            <button 
+                                type="button"
+                                onClick={() => setShowCodePreview(true)}
+                                className="text-[10px] font-black text-white hover:text-yellow-500 transition-colors"
+                            >
+                                Edit Code
+                            </button>
+                        </div>
                     )}
                   </div>
                 )}

@@ -30,6 +30,7 @@ import {
   normalizeCodeGenMessageHistory,
   updateGeneratedCode,
 } from "../../../services/codeGenService";
+import { validateCustomBacktest } from "../../../services/backtestService";
 import { formatLongDateTime } from "../../../utils/formatters";
 
 const sanitizeFileName = (value) =>
@@ -177,6 +178,9 @@ const CodeGeneration = () => {
 
   const [latestStrategyDesc, setLatestStrategyDesc] = useState("");
   const [copiedId, setCopiedId] = useState(null);
+
+  const [validationErrors, setValidationErrors] = useState({});
+  const [validatingCodeId, setValidatingCodeId] = useState(null);
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -597,10 +601,36 @@ const CodeGeneration = () => {
     }
   };
 
-  const handleTestStrategy = (code, version = 1) => {
+  const handleTestStrategy = async (code, version = 1, messageId) => {
     if (!code) {
       console.error("No code available to test");
       return;
+    }
+
+    if (messageId) {
+      setValidatingCodeId(messageId);
+      setValidationErrors((prev) => ({ ...prev, [messageId]: null }));
+
+      try {
+        const result = await validateCustomBacktest(code);
+        if (!result.valid) {
+          setValidationErrors((prev) => ({
+            ...prev,
+            [messageId]: result.error || "Invalid code structure.",
+          }));
+          setValidatingCodeId(null);
+          return;
+        }
+      } catch (error) {
+        setValidationErrors((prev) => ({
+          ...prev,
+          [messageId]:
+            error.response?.data?.detail || error.message || "Validation failed.",
+        }));
+        setValidatingCodeId(null);
+        return;
+      }
+      setValidatingCodeId(null);
     }
 
     navigate("/dashboard/backtest/new", {
@@ -611,6 +641,7 @@ const CodeGeneration = () => {
         strategyType: "custom",
         version,
         source: "codegen",
+        autoSelect: true
       },
     });
   };
@@ -621,7 +652,10 @@ const CodeGeneration = () => {
     isImproved = false,
     messageId,
     role = "assistant"
-  ) => (
+  ) => {
+    const isRunnableStrategy = code && code.includes("def generate_signals");
+
+    return (
     <div className="space-y-4">
       <div className="text-sm leading-relaxed prose prose-invert max-w-none">
         <ReactMarkdown
@@ -692,12 +726,18 @@ const CodeGeneration = () => {
 
           <div className="px-4 py-3 bg-white/5 border-t border-white/5 flex gap-2">
             <button
-              onClick={() => handleTestStrategy(code, isImproved ? 2 : 1)}
-              disabled={!code}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleTestStrategy(code, isImproved ? 2 : 1, messageId)}
+              disabled={!code || validatingCodeId === messageId || !isRunnableStrategy}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-black text-[11px] font-black uppercase tracking-widest hover:bg-yellow-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
             >
-              <FiPlay size={12} />
-              {isImproved ? "Test Improved Strategy" : "Test Strategy"}
+              <FiPlay size={14} className="fill-current" />
+              {validatingCodeId === messageId 
+                ? "Validating..." 
+                : !isRunnableStrategy
+                  ? "Code Incomplete for Backtest"
+                  : isImproved 
+                    ? "Run Backtest Simulation v2" 
+                    : "Run Backtest Simulation"}
             </button>
             <button
               onClick={() =>
@@ -709,6 +749,15 @@ const CodeGeneration = () => {
               Download Code
             </button>
           </div>
+          
+          {validationErrors[messageId] && (
+            <div className="px-4 py-3 bg-red-500/10 border-t border-red-500/20 text-red-400 text-xs font-mono whitespace-pre-wrap">
+              <div className="flex items-center gap-2 mb-1 text-red-500 font-bold">
+                <FiAlertCircle size={12} /> Strategy Code Validation Error
+              </div>
+              {validationErrors[messageId]}
+            </div>
+          )}
         </div>
       )}
 
@@ -720,6 +769,7 @@ const CodeGeneration = () => {
       )}
     </div>
   );
+};
 
   const codegenSuggestions = [
     "Generate a momentum strategy using RSI and MACD for GBP/USD.",

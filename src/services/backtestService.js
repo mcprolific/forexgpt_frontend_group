@@ -130,6 +130,11 @@ export const runCustomBacktest = async (payload) => {
   return res.data;
 };
 
+export const validateCustomBacktest = async (customCode) => {
+  const res = await axiosInstance.post("/backtest/run/custom/validate", { custom_code: customCode });
+  return res.data;
+};
+
 export const getBacktestResults = async (userId, limit = 200, offset = 0) => {
   const cached = readCachedList(getBacktestListCacheKey(userId));
 
