@@ -786,6 +786,3 @@ The `handle_new_user` trigger runs as `SECURITY DEFINER` (elevated privileges) a
 
 **Why does `strategies` have a `is_public` SELECT policy in addition to the owner policy?**
 The leaderboard shows strategies from all users, not just the current user. The `is_public = TRUE` policy lets any authenticated user read public strategy metadata, while the owner policy gives full access to the strategy owner including the code and private strategies.
-
-
-
