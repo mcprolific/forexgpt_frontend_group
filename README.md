@@ -1,5 +1,8 @@
 # ForexGPT — Complete Project Documentation
 
+**Frontend URL**: [www.forexgpt.com.ng](https://www.forexgpt.com.ng)
+**Backend API**: [https://api.forexgpt.com.ng](https://api.forexgpt.com.ng)
+
 Welcome to the **ForexGPT** project repository! This document unifies the documentation for both the Frontend and the Backend (including Database Schema).
 
 ---
@@ -226,7 +229,41 @@ The FastAPI backend accesses Postgres exclusively through `core/database.py`, wh
 
 ---
 
-## File Structure
+## Project Structure
+
+```
+forexgpt_backend/
+├─ api/                   FastAPI routes and middleware
+│  ├─ routes/             API endpoint definitions (auth, mentor, etc.)
+│  └─ middleware/         CORS and authentication middleware
+├─ backtesting/           Backtesting engine core logics
+├─ core/                  Core setup and database configuration
+│  ├─ config.py           Environment config loader
+│  ├─ database.py         Supabase client and repository layer
+│  └─ dependencies.py     FastAPI dependency injection
+├─ data/                  Static data files and assets
+├─ models/                Pydantic validation models
+│  ├─ user.py             User models
+│  ├─ mentor.py           Mentor Q&A models
+│  ├─ codegen.py          Code generation models
+│  └─ backtest.py         Backtest and strategy models
+├─ prompts/               LLM system prompts
+├─ routes/                (Legacy routes, mostly migrated to api/routes)
+├─ services/              Business logic layer
+│  ├─ auth_service.py     Authentication processing
+│  ├─ mentor_service.py   AI Mentor logic
+│  ├─ codegen_service.py  Strategy generation logic
+│  ├─ signal_service.py   Signal extraction logic
+│  └─ backtest_service.py Backtest execution logic
+├─ supabase_project/      Supabase migrations and setups
+│  └─ migrations/         SQL schema files
+├─ tests/                 Unit and integration tests
+├─ utils/                 Helper functions
+├─ main.py                FastAPI application entry point
+└─ requirements.txt       Python dependencies
+```
+
+### forexgpt_supabase/
 
 ```
 forexgpt_supabase/
